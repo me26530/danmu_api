@@ -2181,17 +2181,29 @@ async function processMergeTask(params) {
 
             // 1. 提取共识集数差 (Consensus Shift)
             const shiftCounts = new Map();
+            let lastPNum = null;
             filteredMLinksWithIndex.forEach((sItem, k) => {
                 const pItem = filteredPLinksWithIndex[k + offset];
                 if (!pItem) return;
 
-                const { info: infoP } = getEpisodeInfoWithLogicalNum(pItem, k + offset, currentPrimarySource, redundantP, logicalNumsP);
-                const { info: infoS } = getEpisodeInfoWithLogicalNum(sItem, k, secSource, redundantS, logicalNumsS);
+                const { cleanTitle: cleanTitleP, info: infoP } = getEpisodeInfoWithLogicalNum(pItem, k + offset, currentPrimarySource, redundantP, logicalNumsP);
+                const { cleanTitle: cleanTitleS, info: infoS } = getEpisodeInfoWithLogicalNum(sItem, k, secSource, redundantS, logicalNumsS);
 
-                if (infoP.num !== null && infoS.num !== null && !infoP.isSpecial && !infoS.isSpecial) {
-                    const diff = infoP.num - infoS.num;
-                    shiftCounts.set(diff, (shiftCounts.get(diff) || 0) + 1);
+                if (infoP.num === null || infoS.num === null || isBroadSpecial(infoP) || isBroadSpecial(infoS)) return;
+
+                const diff = infoP.num - infoS.num;
+                const sim = calculateSimilarity(cleanEpisodeText(cleanTitleP), cleanEpisodeText(cleanTitleS));
+
+                // 权重计算: 基础(1.0) + 文本奖励(1.0)
+                let weight = 1.0 + (sim > 0.45 ? 1.0 : 0);
+                // 断层惩罚：检测到主源正片跳集 (防异构/占位区污染)
+                if (lastPNum !== null && (infoP.num - lastPNum > 1)) {
+                    weight = 0.1;
+                } else {
+                    lastPNum = infoP.num; // 未断层则更新游标
                 }
+
+                shiftCounts.set(diff, (shiftCounts.get(diff) || 0) + weight);
             });
             const consensusShift = shiftCounts.size > 0
                 ? [...shiftCounts.entries()].reduce((max, curr) => curr[1] > max[1] ? curr : max)[0]
@@ -2230,7 +2242,7 @@ async function processMergeTask(params) {
                       let closestIdx = -0.5;
                       for (let i = filteredPLinksWithIndex.length - 1; i >= 0; i--) {
                           const { info: infoP } = getEpisodeInfoWithLogicalNum(filteredPLinksWithIndex[i], i, currentPrimarySource, redundantP, logicalNumsP);
-                          if (infoP.num !== null && !infoP.isSpecial && infoP.num < targetNum) {
+                          if (infoP.num !== null && !isBroadSpecial(infoP) && infoP.num < targetNum) {
                               closestIdx = i;
                               break;
                           }
