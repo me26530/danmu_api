@@ -1,0 +1,10 @@
+{
+  "tasks": {
+    "start": "deno run --allow-net --allow-env --allow-read main.ts"
+  },
+  "nodeModulesDir": "auto",
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": false
+  }
+}
