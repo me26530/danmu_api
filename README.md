@@ -598,6 +598,8 @@ Node / Docker 挂载 `config/.env` 后，大部分业务配置会自动热加载
 | `BILIBILI_COOKIE` | B 站 Cookie，UI 支持扫码登录、校验、刷新 |
 | `DOUBAN_COOKIE` | 豆瓣 Cookie；配置后 Douban 请求会优先直接带 Cookie，降低搜索接口 403 风控概率 |
 | `YOUKU_CONCURRENCY` | 优酷并发数 |
+| `SOURCE_DETAIL_CONCURRENCY` | 单个源处理搜索候选详情/剧集解析的默认并发数，默认 `4`，范围 `1-16`；不是全站 HTTP 并发，也不是弹幕分段下载并发 |
+| `SOURCE_DETAIL_CONCURRENCY_BY_SOURCE` | 按源覆盖详情并发，格式 `源名:并发,源名:并发`，如 `tencent:2,vod:3,iqiyi:4`；适合给容易风控或较慢的源单独降并发 |
 | `PROXY_URL` | 代理 / 反代配置，支持正向代理、万能反代、平台专用反代 |
 | `LOCAL_PROXY_BIND` | 本地 5321 辅助代理绑定地址 |
 | `LOCAL_PROXY_TOKEN` | 本地 5321 辅助代理鉴权 token |

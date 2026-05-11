@@ -149,6 +149,51 @@ export class Envs {
   }
 
   /**
+   * 规范化源详情/候选处理并发数
+   * @param {any} value 原始值
+   * @param {number} fallback 默认值
+   * @returns {number} 1-16 范围内的并发数
+   */
+  static normalizeSourceDetailConcurrency(value, fallback = 4) {
+    const parsed = Math.floor(Number(value));
+    const normalizedFallback = Math.min(Math.max(Math.floor(Number(fallback) || 4), 1), 16);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      return normalizedFallback;
+    }
+    return Math.min(parsed, 16);
+  }
+
+  /**
+   * 解析单源详情/候选处理并发覆盖
+   * @returns {Object} 按源名索引的并发覆盖配置
+   */
+  static resolveSourceDetailConcurrencyBySource() {
+    const rawConfig = this.get('SOURCE_DETAIL_CONCURRENCY_BY_SOURCE', '', 'string').trim();
+    if (!rawConfig) {
+      return {};
+    }
+
+    return rawConfig
+      .split(',')
+      .map(item => item.trim())
+      .filter(Boolean)
+      .reduce((acc, item) => {
+        const [sourceName, rawValue] = item.split(':').map(part => part?.trim());
+        if (!sourceName || !rawValue || !this.ALLOWED_SOURCES.includes(sourceName)) {
+          return acc;
+        }
+
+        const parsed = Math.floor(Number(rawValue));
+        if (!Number.isFinite(parsed) || parsed <= 0) {
+          return acc;
+        }
+
+        acc[sourceName] = Math.min(parsed, 16);
+        return acc;
+      }, {});
+  }
+
+  /**
    * 解析源排序
    * @returns {Array} 源排序数组
    */
@@ -574,6 +619,8 @@ export class Envs {
       'BILIBILI_COOKIE': { category: 'source', type: 'text', description: 'B站Cookie' },
       'DOUBAN_COOKIE': { category: 'source', type: 'text', description: '豆瓣Cookie，用于降低 Douban 搜索与部分详情 GET 请求的 403 风控概率，相关请求会优先直接携带 Cookie，建议填写浏览器中 m.douban.com 的完整 Cookie' },
       'YOUKU_CONCURRENCY': { category: 'source', type: 'number', description: '优酷并发配置，默认8', min: 1, max: 16 },
+      'SOURCE_DETAIL_CONCURRENCY': { category: 'source', type: 'number', description: '源内详情/候选处理默认并发，默认4，范围 1-16；用于控制单个源在处理搜索候选详情时的同时并发数', min: 1, max: 16 },
+      'SOURCE_DETAIL_CONCURRENCY_BY_SOURCE': { category: 'source', type: 'text', description: '按源覆盖源内详情/候选处理并发，格式：源名:并发,源名:并发；示例：tencent:2,vod:3,iqiyi:4，值会被限制在 1-16 范围内' },
       'MERGE_SOURCE_PAIRS': { category: 'source', type: 'multi-select', options: this.MERGE_ALLOWED_SOURCES, description: '源合并配置，配置后将对应源合并同时一起获取弹幕返回，允许多组，允许多源，允许填单源表示保留原结果，一组中第一个为主源其余为副源，副源往主源合并，主源如果没有结果会轮替下一个作为主源。\n格式：源1&源2&源3 ，多组用逗号分隔。\n示例：dandan&animeko&bahamut,bilibili&animeko,dandan' },
       'REAL_TIME_PULL_DANDAN': { category: 'source', type: 'boolean', description: '已废弃兼容项：弹弹 related 接口已下线，当前版本保留该变量仅为兼容旧配置，不再生效' },
       // 匹配配置
@@ -652,8 +699,8 @@ export class Envs {
       vodRequestTimeout: this.get('VOD_REQUEST_TIMEOUT', '10000', 'string'), // vod超时时间（默认10秒）
       bilibliCookie: this.get('BILIBILI_COOKIE', '', 'string', true), // b站cookie
       doubanCookie: this.get('DOUBAN_COOKIE', '', 'string', true), // 豆瓣 cookie，用于降低 Douban 搜索接口 403 风控概率
-      sourceDetailConcurrency: 4, // 源内详情/候选处理默认并发，固定默认4，避免为内部调优新增环境变量
-      sourceDetailConcurrencyBySource: {}, // 内部单源并发覆盖保留为代码级配置，不暴露环境变量
+      sourceDetailConcurrency: this.normalizeSourceDetailConcurrency(this.get('SOURCE_DETAIL_CONCURRENCY', 4, 'string'), 4), // 源内详情/候选处理默认并发，范围 1-16，默认4
+      sourceDetailConcurrencyBySource: this.resolveSourceDetailConcurrencyBySource(), // 单源详情/候选处理并发覆盖，格式：tencent:2,vod:3
       youkuConcurrency: Math.min(this.get('YOUKU_CONCURRENCY', 8, 'number'), 16), // 优酷并发配置
       mergeSourcePairs: this.resolveMergeSourcePairs(), // 源合并配置，用于将源合并获取
       realTimePullDandan: this.get('REAL_TIME_PULL_DANDAN', false, 'boolean'), // 已废弃兼容项：保留旧配置读取，不再驱动 related 实时拉取逻辑
