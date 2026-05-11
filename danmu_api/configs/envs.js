@@ -205,33 +205,6 @@ export class Envs {
       .filter(Boolean);
   }
 
-  static normalizeConcurrencyLimit(value, fallback = 4, max = 16) {
-    const parsed = Math.floor(Number(value));
-    const normalizedFallback = Math.max(1, Math.floor(Number(fallback) || 1));
-    const normalizedMax = Math.max(1, Math.floor(Number(max) || normalizedFallback));
-    if (!Number.isFinite(parsed) || parsed <= 0) {
-      return Math.min(normalizedFallback, normalizedMax);
-    }
-    return Math.min(parsed, normalizedMax);
-  }
-
-  static resolveSourceDetailConcurrencyBySource(defaultConcurrency) {
-    const rawConfig = this.get('SOURCE_DETAIL_CONCURRENCY_BY_SOURCE', '', 'string');
-    if (!rawConfig) return {};
-
-    const result = {};
-    for (const item of rawConfig.split(',')) {
-      const [rawSource, rawLimit] = item.split(':').map(s => s?.trim());
-      if (!rawSource || !this.ALLOWED_SOURCES.includes(rawSource)) continue;
-      const limit = Number(rawLimit);
-      if (!Number.isFinite(limit) || limit <= 0) continue;
-      result[rawSource] = this.normalizeConcurrencyLimit(limit, defaultConcurrency, 16);
-    }
-
-    this.accessedEnvVars.set('SOURCE_DETAIL_CONCURRENCY_BY_SOURCE', result);
-    return result;
-  }
-
   static resolveDanmuLikePreset() {
     const allowedPresets = ['default', 'pink_under_1k', 'outline_under_1k', 'pink_only', 'outline_only', 'off'];
     const rawPreset = this.get('DANMU_LIKE_PRESET', 'default', 'string').trim().toLowerCase();
@@ -598,8 +571,6 @@ export class Envs {
       'VOD_SERVERS': { category: 'source', type: 'text', description: 'VOD站点配置，格式：名称@URL,名称@URL，默认金蝉@https://zy.jinchancaiji.com,789@https://www.caiji.cyou,听风@https://gctf.tfdh.top' },
       'VOD_RETURN_MODE': { category: 'source', type: 'select', options: ['all', 'fastest'], description: 'VOD返回模式：all（所有站点）或 fastest（最快的站点），默认fastest' },
       'VOD_REQUEST_TIMEOUT': { category: 'source', type: 'number', description: 'VOD请求超时时间，默认10000', min: 5000, max: 30000 },
-      'SOURCE_DETAIL_CONCURRENCY': { category: 'source', type: 'number', description: '源内详情/候选处理默认并发数，默认4，最大16', min: 1, max: 16 },
-      'SOURCE_DETAIL_CONCURRENCY_BY_SOURCE': { category: 'source', type: 'map', description: '单源详情并发覆盖，格式 tencent:2,vod:3，最大16' },
       'BILIBILI_COOKIE': { category: 'source', type: 'text', description: 'B站Cookie' },
       'DOUBAN_COOKIE': { category: 'source', type: 'text', description: '豆瓣Cookie，用于降低 Douban 搜索与部分详情 GET 请求的 403 风控概率，相关请求会优先直接携带 Cookie，建议填写浏览器中 m.douban.com 的完整 Cookie' },
       'YOUKU_CONCURRENCY': { category: 'source', type: 'number', description: '优酷并发配置，默认8', min: 1, max: 16 },
@@ -637,8 +608,8 @@ export class Envs {
       'DANMU_OFFSET': { category: 'danmu', type: 'timeline-offset', options: this.ALLOWED_SOURCES, description: '弹幕时间偏移配置，格式：剧名:秒 或 剧名/季:秒 或 剧名/季/集:秒，支持指定来源：剧名@来源:秒 或 剧名/季@来源1&来源2:秒，多条用逗号分隔，正数表示弹幕延后（向右），负数表示弹幕提前（向左）。支持百分比模式：在路径或来源末尾追加 %，如 东方/S03/E02@tencent%:11，按公式 原时间 * (视频时长 + 偏移秒数) / 视频时长 缩放全部弹幕时间。示例：overlord/S01:90,re-zero/S02@bilibili:120,re-zero/S02/E03@dandan&bilibili:10,东方/S03/E02@tencent%:11' },
 
       // 缓存配置
-      'SEARCH_CACHE_MINUTES': { category: 'cache', type: 'number', description: '搜索结果缓存时间(分钟)，默认3', min: 1, max: 120 },
-      'COMMENT_CACHE_MINUTES': { category: 'cache', type: 'number', description: '弹幕缓存时间(分钟)，默认3', min: 1, max: 120 },
+      'SEARCH_CACHE_MINUTES': { category: 'cache', type: 'number', description: '搜索结果缓存时间(分钟)，0表示不缓存，默认3', min: 0, max: 120 },
+      'COMMENT_CACHE_MINUTES': { category: 'cache', type: 'number', description: '弹幕缓存时间(分钟)，0表示不缓存，默认3', min: 0, max: 120 },
       'SEARCH_CACHE_MAX_ITEMS': { category: 'cache', type: 'number', description: '搜索缓存最大条目数（0表示不限制），默认300', min: 0, max: 50000 },
       'COMMENT_CACHE_MAX_ITEMS': { category: 'cache', type: 'number', description: '弹幕缓存最大条目数（0表示不限制），默认300', min: 0, max: 50000 },
       'REMEMBER_LAST_SELECT': { category: 'cache', type: 'boolean', description: '记住手动选择结果' },
@@ -681,8 +652,8 @@ export class Envs {
       vodRequestTimeout: this.get('VOD_REQUEST_TIMEOUT', '10000', 'string'), // vod超时时间（默认10秒）
       bilibliCookie: this.get('BILIBILI_COOKIE', '', 'string', true), // b站cookie
       doubanCookie: this.get('DOUBAN_COOKIE', '', 'string', true), // 豆瓣 cookie，用于降低 Douban 搜索接口 403 风控概率
-      sourceDetailConcurrency: this.normalizeConcurrencyLimit(this.get('SOURCE_DETAIL_CONCURRENCY', 4, 'number'), 4, 16), // 源内详情/候选处理默认并发，默认4，最大16
-      sourceDetailConcurrencyBySource: this.resolveSourceDetailConcurrencyBySource(this.normalizeConcurrencyLimit(this.get('SOURCE_DETAIL_CONCURRENCY', 4, 'number'), 4, 16)), // 单源详情并发覆盖，格式 source:limit,source:limit
+      sourceDetailConcurrency: 4, // 源内详情/候选处理默认并发，固定默认4，避免为内部调优新增环境变量
+      sourceDetailConcurrencyBySource: {}, // 内部单源并发覆盖保留为代码级配置，不暴露环境变量
       youkuConcurrency: Math.min(this.get('YOUKU_CONCURRENCY', 8, 'number'), 16), // 优酷并发配置
       mergeSourcePairs: this.resolveMergeSourcePairs(), // 源合并配置，用于将源合并获取
       realTimePullDandan: this.get('REAL_TIME_PULL_DANDAN', false, 'boolean'), // 已废弃兼容项：保留旧配置读取，不再驱动 related 实时拉取逻辑

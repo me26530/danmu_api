@@ -9,7 +9,11 @@ import {
   findAnimeTitleById,
   findTitleById,
   findUrlById,
+  getCommentCache,
+  getSearchCache,
   migrateLegacyRuntimeCaches,
+  setCommentCache,
+  setSearchCache,
 } from './utils/cache-util.js';
 
 function resetRuntime() {
@@ -133,4 +137,24 @@ test('anime identity and comment-id lookups should use runtime indexes without s
   assert.equal(replaceResult.calls, 0, 'same-identity replacement should not scan animes with Array.findIndex');
   assert.equal(Globals.animes.length, 1);
   assert.equal(Globals.animes[0].animeTitle, replacement.animeTitle);
+});
+
+test('SEARCH_CACHE_MINUTES=0 should disable search cache writes and hits', () => {
+  resetRuntime();
+  Globals.envs.searchCacheMinutes = 0;
+
+  setSearchCache('禁用搜索缓存', [{ animeId: 1, animeTitle: '禁用搜索缓存' }]);
+
+  assert.equal(Globals.searchCache.size, 0);
+  assert.equal(getSearchCache('禁用搜索缓存'), null);
+});
+
+test('COMMENT_CACHE_MINUTES=0 should disable comment cache writes and hits', () => {
+  resetRuntime();
+  Globals.envs.commentCacheMinutes = 0;
+
+  setCommentCache('https://example.test/video/1', [{ p: '0,1,25,16777215,0,0,0,0', m: '弹幕' }]);
+
+  assert.equal(Globals.commentCache.size, 0);
+  assert.equal(getCommentCache('https://example.test/video/1'), null);
 });

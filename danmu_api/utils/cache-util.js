@@ -67,6 +67,11 @@ function shouldUseRuntimeResponseCache() {
     return true;
 }
 
+function isPositiveFiniteNumber(value) {
+    const normalized = Number(value);
+    return Number.isFinite(normalized) && normalized > 0;
+}
+
 function normalizeRuntimeMapKey(key) {
     return normalizeTitleCacheKey(key) || String(key ?? '').trim();
 }
@@ -1129,6 +1134,10 @@ export function isSearchCacheValid(keyword) {
         return false;
     }
 
+    if (!isPositiveFiniteNumber(globals.searchCacheMinutes)) {
+        return false;
+    }
+
     const cacheKey = findEquivalentMapKey(globals.searchCache, keyword);
     if (!cacheKey) {
         return false;
@@ -1189,6 +1198,10 @@ export function setSearchCache(keyword, results, detailStore = null) {
         return;
     }
 
+    if (!isPositiveFiniteNumber(globals.searchCacheMinutes)) {
+        return;
+    }
+
     const cacheKey = normalizeRuntimeMapKey(keyword);
     const legacyKey = findEquivalentMapKey(globals.searchCache, keyword);
     const timestamp = Date.now();
@@ -1220,6 +1233,10 @@ export function setSearchCache(keyword, results, detailStore = null) {
 // 检查弹幕缓存是否有效（未过期）
 export function isCommentCacheValid(videoUrl) {
     if (!shouldUseRuntimeResponseCache()) {
+        return false;
+    }
+
+    if (!isPositiveFiniteNumber(globals.commentCacheMinutes)) {
         return false;
     }
 
@@ -1257,6 +1274,10 @@ export function getCommentCache(videoUrl) {
 // 设置弹幕缓存
 export function setCommentCache(videoUrl, comments) {
     if (!shouldUseRuntimeResponseCache()) {
+        return;
+    }
+
+    if (!isPositiveFiniteNumber(globals.commentCacheMinutes)) {
         return;
     }
 

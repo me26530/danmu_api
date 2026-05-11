@@ -452,10 +452,10 @@
   - 已覆盖主要 `handleAnimes` 详情 fanout：`tencent/youku/iqiyi/mango/migu/sohu/leshi/xigua/maiduidui/acfun/aiyifan/animeko/bilibili/dandan/douban/tmdb/vod/custom/ezdmw/hanjutv/renren/bahamut/kan360`。
   - 处理方式：并发阶段只返回 payload，按输入顺序统一 `tmpAnimes.push` 与 `addAnime`，避免 Promise 完成顺序污染结果顺序。
 
-- [x] **7.4 增加 source 默认并发配置**
-  - 默认：`SOURCE_DETAIL_CONCURRENCY=4`，上限 16。
-  - 单源覆盖：`SOURCE_DETAIL_CONCURRENCY_BY_SOURCE=tencent:2,vod:3,...`，非法项忽略，超过上限裁剪。
-  - 验证：`ui-config.test.js` 与 `concurrency-util.test.js` 覆盖解析与 per-source 优先级。
+- [x] **7.4 增加 source 默认并发控制**
+  - 默认并发固定为 4，上限 16；这是内部代码级调优，不再额外暴露环境变量。
+  - `concurrency-util.test.js` 保留内部解析与 per-source 优先级覆盖，便于后续如确有必要再通过代码配置细调。
+  - 验证：`ui-config.test.js` 覆盖该内部并发控制不会出现在环境变量面板中。
 
 - [x] **7.5 benchmark p95 与失败率**
   - 命令：`node scripts/search-match-performance-baseline.mjs`
