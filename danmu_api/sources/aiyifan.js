@@ -5,10 +5,11 @@ import { convertToAsciiSum, md5 } from "../utils/codec-util.js";
 import { hexToInt } from "../utils/danmu-util.js";
 import { generateValidStartDate } from "../utils/time-util.js";
 import { addAnime, removeEarliestAnime } from "../utils/cache-util.js";
-import { titleMatches } from "../utils/common-util.js";
+import { preferSeasonCandidatesIfPresent, resolveQuerySeason, titleMatches } from "../utils/common-util.js";
 import { simplized } from "../utils/zh-util.js";
 import { globals } from '../configs/globals.js';
 import { AiyifanSigningProvider } from '../utils/aiyifan-util.js';
+import { mapWithConcurrency, resolveSourceConcurrency } from '../utils/concurrency-util.js';
 
 // =====================
 // 获取爱壹帆弹幕
@@ -351,14 +352,19 @@ export default class AiyifanSource extends BaseSource {
       return [];
     }
 
-    const processPromises = sourceAnimes
-      .filter(anime => titleMatches(anime.title, queryTitle))
-      .map(async (anime) => {
+    const querySeason = resolveQuerySeason(queryTitle, detailStore);
+    const seasonPreferredAnimes = preferSeasonCandidatesIfPresent(sourceAnimes, querySeason, anime => anime.title || '');
+
+    const matchedAnimes = seasonPreferredAnimes.filter(anime => titleMatches(anime.title, queryTitle));
+    const processedPayloads = await mapWithConcurrency(
+      matchedAnimes,
+      resolveSourceConcurrency('aiyifan', globals),
+      async (anime) => {
         try {
           const eps = await this.getEpisodes(anime.mediaId, anime.embeddedPlaylist);
           if (eps.length === 0) {
             log("info", `[Aiyifan] ${anime.title} 无分集，跳过`);
-            return;
+            return null;
           }
 
           const links = eps.map((ep, index) => ({
@@ -367,7 +373,7 @@ export default class AiyifanSource extends BaseSource {
             title: `【aiyifan】 ${ep.title}`
           }));
 
-          if (links.length === 0) return;
+          if (links.length === 0) return null;
 
           const numericAnimeId = convertToAsciiSum(anime.mediaId);
 
@@ -385,18 +391,24 @@ export default class AiyifanSource extends BaseSource {
             source: "aiyifan",
           };
 
-          tmpAnimes.push(transformedAnime);
-          addAnime({ ...transformedAnime, links }, detailStore);
-
-          if (globals.animes.length > globals.MAX_ANIMES) {
-            removeEarliestAnime();
-          }
+          return { transformedAnime, links };
         } catch (error) {
           log("error", `[Aiyifan] 处理 ${anime.title} 失败:`, error.message);
+          return null;
         }
-      });
+      }
+    );
 
-    await Promise.all(processPromises);
+    for (const payload of processedPayloads) {
+      if (!payload) continue;
+      const { transformedAnime, links } = payload;
+      tmpAnimes.push(transformedAnime);
+      addAnime({ ...transformedAnime, links }, detailStore);
+
+      if (globals.animes.length > globals.MAX_ANIMES) {
+        removeEarliestAnime();
+      }
+    }
 
     this.sortAndPushAnimesByYear(tmpAnimes, curAnimes);
     return tmpAnimes;

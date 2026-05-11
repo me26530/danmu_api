@@ -12,8 +12,9 @@ import MangoSource from "./mango.js";
 import BilibiliSource from "./bilibili.js";
 import YoukuSource from "./youku.js";
 import BahamutSource from "./bahamut.js";
-import { titleMatches, getExplicitSeasonNumber, extractSeasonNumberFromAnimeTitle } from "../utils/common-util.js";
+import { titleMatches, getExplicitSeasonNumber, extractSeasonNumberFromAnimeTitle, preferSeasonCandidatesIfPresent, resolveQuerySeason } from "../utils/common-util.js";
 import { searchBangumiData } from '../utils/bangumi-data-util.js';
+import { mapWithConcurrency, resolveSourceConcurrency } from '../utils/concurrency-util.js';
 
 const tencentSource = new TencentSource();
 const iqiyiSource = new IqiyiSource();
@@ -312,26 +313,19 @@ export default class DandanSource extends BaseSource {
     const existingIds = new Set();
     const queue = [];
 
-    // 提取搜索词中的明确季度信息
-    const querySeason = getExplicitSeasonNumber(queryTitle);
+    // 提取搜索词中的明确季度信息；优先使用调度层传入的 SearchContext。
+    const querySeason = resolveQuerySeason(queryTitle, detailStore);
 
     // 初始列表预过滤机制：若用户指定了季度，优先检查初始结果中是否已包含匹配项
-    let matchedAnimes = sourceAnimes;
-    let isTargetFoundInInitial = false;
+    let matchedAnimes = preferSeasonCandidatesIfPresent(
+      sourceAnimes,
+      querySeason,
+      anime => anime._displayTitle || anime.animeTitle || anime.title || ''
+    );
+    let isTargetFoundInInitial = matchedAnimes !== sourceAnimes;
 
-    if (querySeason !== null) {
-      const filtered = sourceAnimes.filter(anime => {
-        const titleToCheck = anime._displayTitle || anime.animeTitle;
-        const s = extractSeasonNumberFromAnimeTitle(titleToCheck).season;
-        return s === querySeason || (querySeason === 1 && s === null);
-      });
-
-      // 如果已命中目标，减少详情请求量
-      if (filtered.length > 0) {
-        matchedAnimes = filtered;
-        isTargetFoundInInitial = true;
-        log("info", `[Dandan] 结果已命中目标季(第${querySeason}季)，跳过非目标季相关请求`);
-      }
+    if (isTargetFoundInInitial) {
+      log("info", `[Dandan] 结果已命中目标季(第${querySeason}季)，跳过非目标季相关请求`);
     }
 
     // 初始化任务队列与去重池：将筛选后的条目载入队列，标记为非相关作品
@@ -344,12 +338,16 @@ export default class DandanSource extends BaseSource {
     while (queue.length > 0) {
       const currentBatch = queue.splice(0, queue.length);
 
-      await Promise.all(currentBatch.map(async (anime) => {
-        try {
-          // 获取详情数据（包含剧集、别名和相关作品）
-          const details = await this.getEpisodes(anime.animeId);
-          const eps = details.episodes; // 提取剧集列表
-          const apiAliases = details.titles || []; // 提取 API 返回的别名列表
+      const processedPayloads = await mapWithConcurrency(
+        currentBatch,
+        resolveSourceConcurrency('dandan', globals),
+        async (anime) => {
+          try {
+            // 获取详情数据（包含剧集、别名和相关作品）
+            const details = await this.getEpisodes(anime.animeId);
+            const eps = details.episodes; // 提取剧集列表
+            const apiAliases = details.titles || []; // 提取 API 返回的别名列表
+            const pendingRelateds = [];
 
           // 计算当前作品标题与用户原始搜索词的相似度
           const similarity = this.calculateSimilarity(queryTitle, anime.animeTitle);
@@ -364,7 +362,7 @@ export default class DandanSource extends BaseSource {
               const hasSeason = extractSeasonNumberFromAnimeTitle(rel.animeTitle).season !== null;
               if (!existingIds.has(rel.animeId) && (hasSeason || initialCount >= 25)) {
                 existingIds.add(rel.animeId);
-                queue.push({
+                pendingRelateds.push({
                   animeId: rel.animeId,
                   animeTitle: rel.animeTitle,
                   imageUrl: rel.imageUrl,
@@ -385,7 +383,6 @@ export default class DandanSource extends BaseSource {
 
           if (anime.isRelated || anime.isTmdbSource) {
             // 相关作品及 TMDB 原名搜索结果仅执行季度过滤，避免标题差异误伤
-            const querySeason = getExplicitSeasonNumber(queryTitle);
             if (querySeason !== null) {
               let titleSeason = null;
               for (const title of allTitles) {
@@ -410,7 +407,7 @@ export default class DandanSource extends BaseSource {
           }
 
           if (!isMatch) {
-            return;
+            return { pendingRelateds };
           }
 
           let links = [];
@@ -424,50 +421,61 @@ export default class DandanSource extends BaseSource {
             });
           }
 
-          if (links.length > 0) {
-            // 优先使用 TMDB 智能标题替换后的标题，如果没有则直接使用原标题
-            const displayTitle = anime._displayTitle || anime.animeTitle;
-
-            // 合并别名池：API返回的别名 + 原始标题（供合并工具对齐使用）
-            const finalAliases = [...new Set([...apiAliases, ...(anime.aliases || [])])];
-            if (anime.animeTitle && anime.animeTitle !== displayTitle && !finalAliases.includes(anime.animeTitle)) {
-              finalAliases.push(anime.animeTitle);
-            }
-
-            // 构造标准番剧对象
-            // 类型统一从 bangumi 详情接口读取，确保相关作品不会错误继承主作品类型
-            const resolvedType = details.type || anime.type || "tvseries";
-            const resolvedTypeDescription = details.typeDescription || anime.typeDescription || "TV动画";
-            // 年份优先使用搜索接口提供的 startDate，相关作品无此字段时降级到第一话的 airDate
-            const resolvedStartDate = anime.startDate || (eps.length > 0 ? eps[0].airDate : null);
-            const yearStr = resolvedStartDate ? new Date(resolvedStartDate).getFullYear() : '未知';
-            let transformedAnime = {
-              animeId: anime.animeId,
-              bangumiId: String(anime.animeId),
-              animeTitle: `${displayTitle}(${yearStr})【${resolvedTypeDescription}】from dandan`,
-              aliases: finalAliases,
-              type: resolvedType,
-              typeDescription: resolvedTypeDescription,
-              imageUrl: details.imageUrl || anime.imageUrl,
-              startDate: resolvedStartDate,
-              episodeCount: links.length,
-              rating: anime.rating || 0,
-              isFavorited: true,
-              source: "dandan",
-            };
-
-            tmpAnimes.push(transformedAnime);
-
-            // 添加到全局缓存
-            addAnime({...transformedAnime, links: links}, detailStore);
-
-            // 维护缓存大小
-            if (globals.animes.length > globals.MAX_ANIMES) removeEarliestAnime();
+          if (links.length === 0) {
+            return { pendingRelateds };
           }
+
+          // 优先使用 TMDB 智能标题替换后的标题，如果没有则直接使用原标题
+          const displayTitle = anime._displayTitle || anime.animeTitle;
+
+          // 合并别名池：API返回的别名 + 原始标题（供合并工具对齐使用）
+          const finalAliases = [...new Set([...apiAliases, ...(anime.aliases || [])])];
+          if (anime.animeTitle && anime.animeTitle !== displayTitle && !finalAliases.includes(anime.animeTitle)) {
+            finalAliases.push(anime.animeTitle);
+          }
+
+          // 构造标准番剧对象
+          // 类型统一从 bangumi 详情接口读取，确保相关作品不会错误继承主作品类型
+          const resolvedType = details.type || anime.type || "tvseries";
+          const resolvedTypeDescription = details.typeDescription || anime.typeDescription || "TV动画";
+          // 年份优先使用搜索接口提供的 startDate，相关作品无此字段时降级到第一话的 airDate
+          const resolvedStartDate = anime.startDate || (eps.length > 0 ? eps[0].airDate : null);
+          const yearStr = resolvedStartDate ? new Date(resolvedStartDate).getFullYear() : '未知';
+          const transformedAnime = {
+            animeId: anime.animeId,
+            bangumiId: String(anime.animeId),
+            animeTitle: `${displayTitle}(${yearStr})【${resolvedTypeDescription}】from dandan`,
+            aliases: finalAliases,
+            type: resolvedType,
+            typeDescription: resolvedTypeDescription,
+            imageUrl: details.imageUrl || anime.imageUrl,
+            startDate: resolvedStartDate,
+            episodeCount: links.length,
+            rating: anime.rating || 0,
+            isFavorited: true,
+            source: "dandan",
+          };
+
+          return { transformedAnime, links, pendingRelateds };
         } catch (error) {
-          log("error", `[Dandan] Error processing anime: ${error.message}`);
+          log("error", `[Dandan] 处理番剧 ${anime.animeTitle} 时出错:`, error.message);
+          return null;
         }
-      }));
+      }
+      );
+
+      for (const payload of processedPayloads) {
+        if (!payload) continue;
+        const { transformedAnime, links, pendingRelateds = [] } = payload;
+        queue.push(...pendingRelateds);
+        if (!transformedAnime || !Array.isArray(links)) continue;
+        tmpAnimes.push(transformedAnime);
+        addAnime({ ...transformedAnime, links }, detailStore);
+
+        if (globals.animes.length > globals.MAX_ANIMES) {
+          removeEarliestAnime();
+        }
+      }
     }
 
     // 按年份排序并推入当前列表

@@ -4,7 +4,8 @@ import { log } from "../utils/log-util.js";
 import { httpGet } from "../utils/http-util.js";
 import { generateValidStartDate } from "../utils/time-util.js";
 import { addAnime, removeEarliestAnime } from "../utils/cache-util.js";
-import { printFirst200Chars, titleMatches, sanitizeSearchKeyword } from "../utils/common-util.js";
+import { preferSeasonCandidatesIfPresent, printFirst200Chars, resolveQuerySeason, titleMatches, sanitizeSearchKeyword } from "../utils/common-util.js";
+import { mapWithConcurrency, resolveSourceConcurrency } from '../utils/concurrency-util.js';
 
 // =====================
 // 获取vod源播放链接
@@ -152,9 +153,14 @@ export default class VodSource extends BaseSource {
       return [];
     }
 
-    const processVodAnimes = await Promise.all(sourceAnimes
-      .filter(anime => titleMatches(anime.vod_name, queryTitle))
-      .map(async (anime) => {
+    const querySeason = resolveQuerySeason(queryTitle, detailStore);
+    const seasonPreferredAnimes = preferSeasonCandidatesIfPresent(sourceAnimes, querySeason, anime => anime.vod_name || '');
+
+    const matchedAnimes = seasonPreferredAnimes.filter(anime => titleMatches(anime.vod_name, queryTitle));
+    const processedPayloads = await mapWithConcurrency(
+      matchedAnimes,
+      resolveSourceConcurrency('vod', globals),
+      async (anime) => {
         try {
           let vodPlayFromList = anime.vod_play_from.split("$$$");
           vodPlayFromList = vodPlayFromList.map(item => {
@@ -184,33 +190,40 @@ export default class VodSource extends BaseSource {
             }
           }
 
-          if (links.length > 0) {
-            let transformedAnime = {
-              animeId: Number(anime.vod_id),
-              bangumiId: String(anime.vod_id),
-              animeTitle: `${anime.vod_name}(${anime.vod_year})【${anime.type_name}】from ${vodName}`,
-              type: anime.type_name,
-              typeDescription: anime.type_name,
-              imageUrl: anime.vod_pic,
-              startDate: generateValidStartDate(anime.vod_year),
-              episodeCount: links.length,
-              rating: 0,
-              isFavorited: true,
-              source: "vod",
-            };
+          if (links.length === 0) return null;
 
-            tmpAnimes.push(transformedAnime);
-            addAnime({...transformedAnime, links: links}, detailStore);
-            if (globals.animes.length > globals.MAX_ANIMES) removeEarliestAnime();
-          }
+          const transformedAnime = {
+            animeId: Number(anime.vod_id),
+            bangumiId: String(anime.vod_id),
+            animeTitle: `${anime.vod_name}(${anime.vod_year})【${anime.type_name}】from ${vodName}`,
+            type: anime.type_name,
+            typeDescription: anime.type_name,
+            imageUrl: anime.vod_pic,
+            startDate: generateValidStartDate(anime.vod_year),
+            episodeCount: links.length,
+            rating: 0,
+            isFavorited: true,
+            source: "vod",
+          };
+
+          return { anime: transformedAnime, links };
         } catch (error) {
           log("error", `[VOD] Error processing anime: ${error.message}`);
+          return null;
         }
-      }));
+      }
+    );
+
+    for (const payload of processedPayloads) {
+      if (!payload) continue;
+      tmpAnimes.push(payload.anime);
+      addAnime({...payload.anime, links: payload.links}, detailStore);
+      if (globals.animes.length > globals.MAX_ANIMES) removeEarliestAnime();
+    }
 
     this.sortAndPushAnimesByYear(tmpAnimes, curAnimes);
 
-    return processVodAnimes;
+    return processedPayloads;
   }
 
   async getEpisodeDanmu(id) {}

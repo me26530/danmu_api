@@ -205,6 +205,33 @@ export class Envs {
       .filter(Boolean);
   }
 
+  static normalizeConcurrencyLimit(value, fallback = 4, max = 16) {
+    const parsed = Math.floor(Number(value));
+    const normalizedFallback = Math.max(1, Math.floor(Number(fallback) || 1));
+    const normalizedMax = Math.max(1, Math.floor(Number(max) || normalizedFallback));
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      return Math.min(normalizedFallback, normalizedMax);
+    }
+    return Math.min(parsed, normalizedMax);
+  }
+
+  static resolveSourceDetailConcurrencyBySource(defaultConcurrency) {
+    const rawConfig = this.get('SOURCE_DETAIL_CONCURRENCY_BY_SOURCE', '', 'string');
+    if (!rawConfig) return {};
+
+    const result = {};
+    for (const item of rawConfig.split(',')) {
+      const [rawSource, rawLimit] = item.split(':').map(s => s?.trim());
+      if (!rawSource || !this.ALLOWED_SOURCES.includes(rawSource)) continue;
+      const limit = Number(rawLimit);
+      if (!Number.isFinite(limit) || limit <= 0) continue;
+      result[rawSource] = this.normalizeConcurrencyLimit(limit, defaultConcurrency, 16);
+    }
+
+    this.accessedEnvVars.set('SOURCE_DETAIL_CONCURRENCY_BY_SOURCE', result);
+    return result;
+  }
+
   static resolveDanmuLikePreset() {
     const allowedPresets = ['default', 'pink_under_1k', 'outline_under_1k', 'pink_only', 'outline_only', 'off'];
     const rawPreset = this.get('DANMU_LIKE_PRESET', 'default', 'string').trim().toLowerCase();
@@ -571,6 +598,8 @@ export class Envs {
       'VOD_SERVERS': { category: 'source', type: 'text', description: 'VOD站点配置，格式：名称@URL,名称@URL，默认金蝉@https://zy.jinchancaiji.com,789@https://www.caiji.cyou,听风@https://gctf.tfdh.top' },
       'VOD_RETURN_MODE': { category: 'source', type: 'select', options: ['all', 'fastest'], description: 'VOD返回模式：all（所有站点）或 fastest（最快的站点），默认fastest' },
       'VOD_REQUEST_TIMEOUT': { category: 'source', type: 'number', description: 'VOD请求超时时间，默认10000', min: 5000, max: 30000 },
+      'SOURCE_DETAIL_CONCURRENCY': { category: 'source', type: 'number', description: '源内详情/候选处理默认并发数，默认4，最大16', min: 1, max: 16 },
+      'SOURCE_DETAIL_CONCURRENCY_BY_SOURCE': { category: 'source', type: 'map', description: '单源详情并发覆盖，格式 tencent:2,vod:3，最大16' },
       'BILIBILI_COOKIE': { category: 'source', type: 'text', description: 'B站Cookie' },
       'DOUBAN_COOKIE': { category: 'source', type: 'text', description: '豆瓣Cookie，用于降低 Douban 搜索与部分详情 GET 请求的 403 风控概率，相关请求会优先直接携带 Cookie，建议填写浏览器中 m.douban.com 的完整 Cookie' },
       'YOUKU_CONCURRENCY': { category: 'source', type: 'number', description: '优酷并发配置，默认8', min: 1, max: 16 },
@@ -652,6 +681,8 @@ export class Envs {
       vodRequestTimeout: this.get('VOD_REQUEST_TIMEOUT', '10000', 'string'), // vod超时时间（默认10秒）
       bilibliCookie: this.get('BILIBILI_COOKIE', '', 'string', true), // b站cookie
       doubanCookie: this.get('DOUBAN_COOKIE', '', 'string', true), // 豆瓣 cookie，用于降低 Douban 搜索接口 403 风控概率
+      sourceDetailConcurrency: this.normalizeConcurrencyLimit(this.get('SOURCE_DETAIL_CONCURRENCY', 4, 'number'), 4, 16), // 源内详情/候选处理默认并发，默认4，最大16
+      sourceDetailConcurrencyBySource: this.resolveSourceDetailConcurrencyBySource(this.normalizeConcurrencyLimit(this.get('SOURCE_DETAIL_CONCURRENCY', 4, 'number'), 4, 16)), // 单源详情并发覆盖，格式 source:limit,source:limit
       youkuConcurrency: Math.min(this.get('YOUKU_CONCURRENCY', 8, 'number'), 16), // 优酷并发配置
       mergeSourcePairs: this.resolveMergeSourcePairs(), // 源合并配置，用于将源合并获取
       realTimePullDandan: this.get('REAL_TIME_PULL_DANDAN', false, 'boolean'), // 已废弃兼容项：保留旧配置读取，不再驱动 related 实时拉取逻辑

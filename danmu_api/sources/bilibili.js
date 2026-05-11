@@ -6,11 +6,12 @@ import { parseDanmakuBase64, convertToAsciiSum } from "../utils/codec-util.js";
 import { md5 } from "../utils/crypto-util.js";
 import { generateValidStartDate } from "../utils/time-util.js";
 import { addAnime, removeEarliestAnime } from "../utils/cache-util.js";
-import { titleMatches } from "../utils/common-util.js";
+import { preferSeasonCandidatesIfPresent, resolveQuerySeason, titleMatches } from "../utils/common-util.js";
 import { SegmentListResponse } from '../models/dandan-model.js';
 import { simplized } from "../utils/zh-util.js";
 import { getTmdbJaOriginalTitle, smartTitleReplace } from "../utils/tmdb-util.js";
 import { searchBangumiData } from '../utils/bangumi-data-util.js';
+import { mapWithConcurrency, resolveSourceConcurrency } from '../utils/concurrency-util.js';
 
 // =====================
 // 获取b站弹幕
@@ -577,10 +578,16 @@ export default class BilibiliSource extends BaseSource {
     const cnAlias = sourceAnimes.length > 0 ? sourceAnimes[0]._tmdbCnAlias : null;
     smartTitleReplace(sourceAnimes, cnAlias);
 
-    const processPromises = sourceAnimes
+    const querySeason = resolveQuerySeason(queryTitle, detailStore);
+    const seasonPreferredAnimes = preferSeasonCandidatesIfPresent(sourceAnimes, querySeason, anime => anime._displayTitle || anime.title || '');
+
+    const matchedAnimes = seasonPreferredAnimes
       // 港澳台资源不做严格标题匹配，其他资源根据当前标题或别名池验证匹配度
-      .filter(anime => anime.isOversea || titleMatches(anime.title, queryTitle) || (anime.aliases && anime.aliases.some(alias => titleMatches(alias, queryTitle))))
-      .map(async (anime) => {
+      .filter(anime => anime.isOversea || titleMatches(anime.title, queryTitle) || (anime.aliases && anime.aliases.some(alias => titleMatches(alias, queryTitle))));
+    const processedPayloads = await mapWithConcurrency(
+      matchedAnimes,
+      resolveSourceConcurrency('bilibili', globals),
+      async (anime) => {
         try {
           let links = [];
 
@@ -629,7 +636,7 @@ export default class BilibiliSource extends BaseSource {
              const eps = await this.getEpisodes(anime.mediaId);
              if (eps.length === 0) {
                log("info", `[Bilibili] ${anime.title} 无分集，跳过`);
-               return;
+               return null;
              }
              links = eps.map((ep, index) => {
                 let linkUrl = ep.link + `?season_id=${anime.mediaId.substring(2)}`;
@@ -643,7 +650,7 @@ export default class BilibiliSource extends BaseSource {
              });
           }
 
-          if (links.length === 0) return;
+          if (links.length === 0) return null;
 
           const numericAnimeId = convertToAsciiSum(anime.mediaId);
 
@@ -665,18 +672,24 @@ export default class BilibiliSource extends BaseSource {
             aliases: anime.aliases
           };
 
-          tmpAnimes.push(transformedAnime);
-          addAnime({ ...transformedAnime, links }, detailStore);
-
-          if (globals.animes.length > globals.MAX_ANIMES) {
-            removeEarliestAnime();
-          }
+          return { transformedAnime, links };
         } catch (error) {
           log("error", `[Bilibili] 处理 ${anime.title} 失败:`, error.message);
+          return null;
         }
-      });
+      }
+    );
 
-    await Promise.all(processPromises);
+    for (const payload of processedPayloads) {
+      if (!payload) continue;
+      const { transformedAnime, links } = payload;
+      tmpAnimes.push(transformedAnime);
+      addAnime({ ...transformedAnime, links }, detailStore);
+
+      if (globals.animes.length > globals.MAX_ANIMES) {
+        removeEarliestAnime();
+      }
+    }
 
     this.sortAndPushAnimesByYear(tmpAnimes, curAnimes);
     return tmpAnimes;

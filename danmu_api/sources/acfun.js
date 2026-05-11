@@ -5,8 +5,9 @@ import { httpGet, httpPost } from "../utils/http-util.js";
 import { convertToAsciiSum } from "../utils/codec-util.js";
 import { generateValidStartDate } from "../utils/time-util.js";
 import { addAnime, removeEarliestAnime } from "../utils/cache-util.js";
-import { printFirst200Chars, titleMatches } from "../utils/common-util.js";
+import { preferSeasonCandidatesIfPresent, printFirst200Chars, resolveQuerySeason, titleMatches } from "../utils/common-util.js";
 import { SegmentListResponse } from '../models/dandan-model.js';
+import { mapWithConcurrency, resolveSourceConcurrency } from '../utils/concurrency-util.js';
 
 // =====================
 // 获取 AcFun 弹幕
@@ -537,15 +538,20 @@ export default class AcfunSource extends BaseSource {
       return [];
     }
 
-    const processAcfunAnimes = await Promise.all(sourceAnimes
-      .filter(anime => titleMatches(anime.title || anime.bgmTitle, queryTitle))
-      .map(async (anime) => {
+    const querySeason = resolveQuerySeason(queryTitle, detailStore);
+    const seasonPreferredAnimes = preferSeasonCandidatesIfPresent(sourceAnimes, querySeason, anime => anime.title || anime.bgmTitle || '');
+
+    const matchedAnimes = seasonPreferredAnimes.filter(anime => titleMatches(anime.title || anime.bgmTitle, queryTitle));
+    const processedPayloads = await mapWithConcurrency(
+      matchedAnimes,
+      resolveSourceConcurrency('acfun', globals),
+      async (anime) => {
         try {
           const bangumiId = String(anime.bangumiId || anime.mediaId || anime.id || "");
-          if (!bangumiId) return;
+          if (!bangumiId) return null;
 
           const episodes = await this.getEpisodes(bangumiId);
-          if (!episodes.length) return;
+          if (!episodes.length) return null;
 
           const links = episodes.map((ep, index) => {
             const displayName = ep.episodeName || `第${index + 1}话`;
@@ -573,17 +579,24 @@ export default class AcfunSource extends BaseSource {
             source: "acfun",
           };
 
-          tmpAnimes.push(transformedAnime);
-          addAnime({ ...transformedAnime, links }, detailStore);
-          if (globals.animes.length > globals.MAX_ANIMES) removeEarliestAnime();
+          return { transformedAnime, links };
         } catch (error) {
           log("warn", `[AcFun] 处理动漫失败: ${error.message}`);
+          return null;
         }
-      })
+      }
     );
 
+    for (const payload of processedPayloads) {
+      if (!payload) continue;
+      const { transformedAnime, links } = payload;
+      tmpAnimes.push(transformedAnime);
+      addAnime({ ...transformedAnime, links }, detailStore);
+      if (globals.animes.length > globals.MAX_ANIMES) removeEarliestAnime();
+    }
+
     this.sortAndPushAnimesByYear(tmpAnimes, curAnimes);
-    return processAcfunAnimes;
+    return processedPayloads;
   }
 
   async pollDanmuWindow(videoId, positionFromInclude, positionToExclude) {

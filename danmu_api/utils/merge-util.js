@@ -1960,6 +1960,52 @@ function fastCloneAnime(anime) {
     return JSON.parse(JSON.stringify(anime));
 }
 
+/**
+ * [性能优化] 为一次 applyMergeLogic 调用构建只读查找索引。
+ * 这些索引只替代既有的精确 source/id/clean-title 全表扫描，不做 title/season/year 硬剪枝，避免改变匹配语义。
+ * @param {Array<Anime>} curAnimes
+ * @param {Array<Anime>} globalAnimes
+ */
+function buildMergeLookupIndexes(curAnimes, globalAnimes = globals.animes) {
+    const bySource = new Map();
+    const bySourceLang = new Map();
+    const byCleanTitle = new Map();
+    const globalAnimeById = new Map();
+
+    for (const anime of curAnimes || []) {
+        if (!bySource.has(anime.source)) bySource.set(anime.source, []);
+        bySource.get(anime.source).push(anime);
+
+        const lang = getLanguageType(anime.animeTitle);
+        if (!bySourceLang.has(anime.source)) bySourceLang.set(anime.source, new Map());
+        const langMap = bySourceLang.get(anime.source);
+        if (!langMap.has(lang)) langMap.set(lang, []);
+        langMap.get(lang).push(anime);
+
+        const cleanTitle = cleanTitleForSimilarity(anime.animeTitle);
+        if (!byCleanTitle.has(cleanTitle)) byCleanTitle.set(cleanTitle, []);
+        byCleanTitle.get(cleanTitle).push(anime);
+    }
+
+    // 保持 Array.find 的“首个 String(animeId) 命中”语义，避免 source/id 冲突时行为改变。
+    for (const anime of globalAnimes || []) {
+        const id = String(anime.animeId);
+        if (!globalAnimeById.has(id)) globalAnimeById.set(id, anime);
+    }
+
+    return { bySource, bySourceLang, byCleanTitle, globalAnimeById };
+}
+
+function getIndexedSourceItems(mergeIndexes, source, lang = null) {
+    if (!mergeIndexes) return null;
+    if (lang) return mergeIndexes.bySourceLang.get(source)?.get(lang) || [];
+    return mergeIndexes.bySource.get(source) || [];
+}
+
+function getIndexedAnimeById(mergeIndexes, animeId) {
+    return mergeIndexes?.globalAnimeById?.get(String(animeId));
+}
+
 // ==========================================
 // 8. 核心业务流程 (Workflow)
 // ==========================================
@@ -1974,7 +2020,7 @@ async function processMergeTask(params) {
     const { 
         pAnime, availableSecondaries, curAnimes, groupConsumedIds, globalConsumedIds,
         generatedSignatures, epFilter, groupFingerprint, currentPrimarySource, logPrefix,
-        limitSecondaryLang, collectionAnimeIds, allowReuseIds, collectionProgress
+        limitSecondaryLang, collectionAnimeIds, allowReuseIds, collectionProgress, mergeIndexes
     } = params;
 
     // 在一组中是合集且已作为副源参与过合并就跳过，另一组相互独立互不干扰。
@@ -1983,7 +2029,7 @@ async function processMergeTask(params) {
         return null;
     }
 
-    const cachedPAnime = globals.animes.find(a => String(a.animeId) === String(pAnime.animeId));
+    const cachedPAnime = getIndexedAnimeById(mergeIndexes, pAnime.animeId) || globals.animes.find(a => String(a.animeId) === String(pAnime.animeId));
     if (!cachedPAnime?.links) {
          log("warn", `${logPrefix} 主源数据不完整，跳过: ${pAnime.animeTitle}`);
          return null;
@@ -2007,7 +2053,7 @@ async function processMergeTask(params) {
 
     const isPrimaryCollection = collectionAnimeIds.has(pAnime.animeId);
     const pCleanTitle = cleanTitleForSimilarity(pAnime.animeTitle);
-    const peerAnimes = curAnimes.filter(a => cleanTitleForSimilarity(a.animeTitle) === pCleanTitle);
+    const peerAnimes = mergeIndexes?.byCleanTitle?.get(pCleanTitle) || curAnimes.filter(a => cleanTitleForSimilarity(a.animeTitle) === pCleanTitle);
     const seasonLengthMap = buildSeasonLengthMap(peerAnimes, epFilter, collectionAnimeIds);
 
     if (seasonLengthMap.size > 0) {
@@ -2021,9 +2067,8 @@ async function processMergeTask(params) {
     let allMatches = [];
 
     for (const secSource of availableSecondaries) {
-        let secondaryItems = curAnimes.filter(a => {
-            if (a.source !== secSource) return false;
-
+        const indexedItems = getIndexedSourceItems(mergeIndexes, secSource, limitSecondaryLang || null);
+        let secondaryItems = (indexedItems || curAnimes.filter(a => a.source === secSource)).filter(a => {
             // 合集主源特权：当主源为合集时，允许无视当前组的消耗状态，复用已被消耗的副源以拼凑完整季度
             if (isPrimaryCollection) return true;
 
@@ -2033,7 +2078,7 @@ async function processMergeTask(params) {
             return true;
         });
 
-        if (limitSecondaryLang) secondaryItems = secondaryItems.filter(a => getLanguageType(a.animeTitle) === limitSecondaryLang);
+        if (limitSecondaryLang && !indexedItems) secondaryItems = secondaryItems.filter(a => getLanguageType(a.animeTitle) === limitSecondaryLang);
 
         if (secondaryItems.length > 1) {
             secondaryItems.sort((a, b) => {
@@ -2076,7 +2121,7 @@ async function processMergeTask(params) {
                 if (!isReuse && groupConsumedIds.has(match.animeId)) continue;
             }
 
-            const globalCachedMatch = globals.animes.find(a => String(a.animeId) === String(match.animeId));
+            const globalCachedMatch = getIndexedAnimeById(mergeIndexes, match.animeId) || globals.animes.find(a => String(a.animeId) === String(match.animeId));
             if (!globalCachedMatch?.links) continue;
             const derivedMatch = fastCloneAnime(globalCachedMatch);
 
@@ -2643,6 +2688,9 @@ export async function applyMergeLogic(curAnimes, detailStore = null) {
   // 1. 合集探测 (前置计算)
   const collectionAnimeIds = detectCollectionCandidates(curAnimes);
 
+  // 2. 精确查找索引：只替代既有全表扫描，不参与匹配剪枝，保证 merge 语义不变
+  const mergeIndexes = buildMergeLookupIndexes(curAnimes, globals.animes);
+
   // 用于记录合集的使用进度，辅助切片推理 (Map<animeId, { S1: 10, S2: 24 }>)
   // 此进度对象在所有 Phase 间共享，确保 Phase 1 产生的进度能被 Phase 2 利用
   const collectionProgress = new Map();
@@ -2718,14 +2766,19 @@ export async function applyMergeLogic(curAnimes, detailStore = null) {
     // 注意：此处策略稍微放宽，允许列表中所有 CN 源作为发起方尝试匹配，只要它们还没被消费
     const cnCandidates = [];
     fullPriorityList.forEach(source => {
-       const items = curAnimes.filter(a => a.source === source && !groupConsumedIds.has(a.animeId) && getLanguageType(a.animeTitle) === 'CN');
+       const sourceCnItems = getIndexedSourceItems(mergeIndexes, source, 'CN');
+       const items = (sourceCnItems || curAnimes.filter(a => a.source === source && getLanguageType(a.animeTitle) === 'CN'))
+           .filter(a => !groupConsumedIds.has(a.animeId));
        items.forEach(item => cnCandidates.push(item));
     });
 
     // 检查副源池中是否有 CN 资源，如果没有则跳过 Phase 1
     let hasCnInSecondaries = false;
     for (const secSrc of fullPriorityList) {
-         if (curAnimes.some(a => a.source === secSrc && !groupConsumedIds.has(a.animeId) && getLanguageType(a.animeTitle) === 'CN')) {
+         const sourceCnItems = getIndexedSourceItems(mergeIndexes, secSrc, 'CN');
+         const hasAvailableCn = (sourceCnItems || curAnimes.filter(a => a.source === secSrc && getLanguageType(a.animeTitle) === 'CN'))
+             .some(a => !groupConsumedIds.has(a.animeId));
+         if (hasAvailableCn) {
              hasCnInSecondaries = true;
              break;
          }
@@ -2745,7 +2798,7 @@ export async function applyMergeLogic(curAnimes, detailStore = null) {
 
             const resultAnime = await processMergeTask({
                 pAnime, availableSecondaries, curAnimes, groupConsumedIds, globalConsumedIds, generatedSignatures, epFilter, groupFingerprint,
-                currentPrimarySource: pAnime.source, logPrefix: `[Merge][Phase 1: CN-Strict]`, limitSecondaryLang: 'CN', collectionAnimeIds, collectionProgress
+                currentPrimarySource: pAnime.source, logPrefix: `[Merge][Phase 1: CN-Strict]`, limitSecondaryLang: 'CN', collectionAnimeIds, collectionProgress, mergeIndexes
             });
             if (resultAnime) { 
                 newMergedAnimes.push(resultAnime); 
@@ -2762,7 +2815,9 @@ export async function applyMergeLogic(curAnimes, detailStore = null) {
     // 从第二个源开始扫描，因为主源已经在 Phase 1 尝试过了
     for (let i = 1; i < fullPriorityList.length; i++) {
         const source = fullPriorityList[i];
-        const items = curAnimes.filter(a => a.source === source && !groupConsumedIds.has(a.animeId) && getLanguageType(a.animeTitle) === 'CN');
+        const sourceCnItems = getIndexedSourceItems(mergeIndexes, source, 'CN');
+        const items = (sourceCnItems || curAnimes.filter(a => a.source === source && getLanguageType(a.animeTitle) === 'CN'))
+            .filter(a => !groupConsumedIds.has(a.animeId));
         items.forEach(item => secondaryCnCandidates.push(item));
     }
 
@@ -2780,7 +2835,7 @@ export async function applyMergeLogic(curAnimes, detailStore = null) {
 
              const resultAnime = await processMergeTask({
                  pAnime: tAnime, availableSecondaries, curAnimes, groupConsumedIds, globalConsumedIds, generatedSignatures, epFilter, groupFingerprint,
-                 currentPrimarySource: tAnime.source, logPrefix: `[Merge][Phase 1.5: CN-Secondary]`, limitSecondaryLang: 'CN', collectionAnimeIds, collectionProgress
+                 currentPrimarySource: tAnime.source, logPrefix: `[Merge][Phase 1.5: CN-Secondary]`, limitSecondaryLang: 'CN', collectionAnimeIds, collectionProgress, mergeIndexes
              });
              if (resultAnime) { 
                  newMergedAnimes.push(resultAnime); 
@@ -2794,7 +2849,9 @@ export async function applyMergeLogic(curAnimes, detailStore = null) {
     // 处理剩余的所有资源（包含非 CN 资源以及 Phase 1/1.5 未匹配的 CN 资源）
     const remainingCandidates = [];
     fullPriorityList.forEach(source => {
-       const items = curAnimes.filter(a => a.source === source && !groupConsumedIds.has(a.animeId));
+       const sourceItems = getIndexedSourceItems(mergeIndexes, source);
+       const items = (sourceItems || curAnimes.filter(a => a.source === source))
+           .filter(a => !groupConsumedIds.has(a.animeId));
        items.forEach(item => remainingCandidates.push(item));
     });
 
@@ -2821,7 +2878,7 @@ export async function applyMergeLogic(curAnimes, detailStore = null) {
                 allowReuseIds = new Set();
                 const pSeasonNum = getSeasonNumber(pAnime.animeTitle, pAnime.typeDescription, pAnime.aliases) || 1;
                 for (const consumedId of globalConsumedIds) {
-                    const consumedAnime = globals.animes.find(a => String(a.animeId) === String(consumedId));
+                    const consumedAnime = getIndexedAnimeById(mergeIndexes, consumedId) || globals.animes.find(a => String(a.animeId) === String(consumedId));
                     if (!consumedAnime) continue;
                     if (!availableSecondaries.includes(consumedAnime.source)) continue;
                     const secMarkers = extractSeasonMarkers(consumedAnime.animeTitle, consumedAnime.typeDescription, consumedAnime.aliases);
@@ -2833,7 +2890,7 @@ export async function applyMergeLogic(curAnimes, detailStore = null) {
 
             const resultAnime = await processMergeTask({
                 pAnime, availableSecondaries, curAnimes, groupConsumedIds, globalConsumedIds, generatedSignatures, epFilter, groupFingerprint,
-                currentPrimarySource: pAnime.source, logPrefix: `[Merge][Phase 2: Standard]`, collectionAnimeIds, allowReuseIds, collectionProgress
+                currentPrimarySource: pAnime.source, logPrefix: `[Merge][Phase 2: Standard]`, collectionAnimeIds, allowReuseIds, collectionProgress, mergeIndexes
             });
             if (resultAnime) { 
                 newMergedAnimes.push(resultAnime); 

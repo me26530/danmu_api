@@ -1,6 +1,9 @@
 import BaseSource from './base.js';
 import { log } from "../utils/log-util.js";
 import { getDoubanDetail, searchDoubanTitles, searchDoubanTitlesByPublic } from "../utils/douban-util.js";
+import { preferSeasonCandidatesIfPresent, resolveQuerySeason } from "../utils/common-util.js";
+import { globals } from '../configs/globals.js';
+import { mapWithConcurrency, resolveSourceConcurrency } from '../utils/concurrency-util.js';
 
 // =====================
 // 获取豆瓣源播放链接
@@ -116,7 +119,12 @@ export default class DoubanSource extends BaseSource {
 
   async getEpisodes(id) {}
 
-  async handleAnimes(sourceAnimes, queryTitle, curAnimes, vodName, detailStore = null) {
+  async handleAnimes(sourceAnimes, queryTitle, curAnimes, options = {}, legacyDetailStore = null) {
+    const handleOptions = legacyDetailStore instanceof Map
+      ? { ...(options && !(options instanceof Map) ? options : {}), detailStore: legacyDetailStore }
+      : options instanceof Map
+        ? { detailStore: options }
+        : (options || {});
     const doubanAnimes = [];
 
     // 添加错误处理，确保sourceAnimes是数组
@@ -125,18 +133,25 @@ export default class DoubanSource extends BaseSource {
       return [];
     }
 
-    const processDoubanAnimes = await Promise.allSettled(sourceAnimes.map(async (anime) => {
+    const querySeason = resolveQuerySeason(queryTitle, handleOptions);
+    const seasonPreferredAnimes = preferSeasonCandidatesIfPresent(sourceAnimes, querySeason, anime => anime?.target?.title || anime?.title || '');
+
+    const processDoubanAnimes = await mapWithConcurrency(
+      seasonPreferredAnimes,
+      resolveSourceConcurrency('douban', globals),
+      async (anime) => {
       try {
-        if (anime?.layout !== "subject") return;
+        if (anime?.layout !== "subject") return [];
         const doubanId = anime.target_id;
         let animeType = anime?.type_name;
-        if (animeType !== "电影" && animeType !== "电视剧") return;
+        if (animeType !== "电影" && animeType !== "电视剧") return [];
         log("info", "doubanId: ", doubanId, anime?.target?.title, animeType);
 
         // 获取平台详情页面url
         const response = await getDoubanDetail(doubanId);
 
         const results = [];
+        const localDoubanAnimes = [];
 
         for (const vendor of response.data?.vendors ?? []) {
           if (!vendor) {
@@ -184,7 +199,7 @@ export default class DoubanSource extends BaseSource {
               if (cid) {
                 tmpAnimes[0].provider = "tencent";
                 tmpAnimes[0].mediaId = cid;
-                await this.tencentSource.handleAnimes(tmpAnimes, response.data?.title, doubanAnimes, detailStore)
+                await this.tencentSource.handleAnimes(tmpAnimes, response.data?.title, localDoubanAnimes, handleOptions)
               }
               break;
             }
@@ -193,7 +208,7 @@ export default class DoubanSource extends BaseSource {
               if (tvid) {
                 tmpAnimes[0].provider = "iqiyi";
                 tmpAnimes[0].mediaId = anime?.type_name === '电影' ? `movie_${tvid}` : tvid;
-                await this.iqiyiSource.handleAnimes(tmpAnimes, response.data?.title, doubanAnimes, detailStore)
+                await this.iqiyiSource.handleAnimes(tmpAnimes, response.data?.title, localDoubanAnimes, handleOptions)
               }
               break;
             }
@@ -202,7 +217,7 @@ export default class DoubanSource extends BaseSource {
               if (showId) {
                 tmpAnimes[0].provider = "youku";
                 tmpAnimes[0].mediaId = showId;
-                await this.youkuSource.handleAnimes(tmpAnimes, response.data?.title, doubanAnimes, detailStore)
+                await this.youkuSource.handleAnimes(tmpAnimes, response.data?.title, localDoubanAnimes, handleOptions)
               }
               break;
             }
@@ -211,7 +226,7 @@ export default class DoubanSource extends BaseSource {
               if (seasonId) {
                 tmpAnimes[0].provider = "bilibili";
                 tmpAnimes[0].mediaId = `ss${seasonId}`;
-                await this.bilibiliSource.handleAnimes(tmpAnimes, response.data?.title, doubanAnimes, detailStore)
+                await this.bilibiliSource.handleAnimes(tmpAnimes, response.data?.title, localDoubanAnimes, handleOptions)
               }
               break;
             }
@@ -225,18 +240,25 @@ export default class DoubanSource extends BaseSource {
               if (epId) {
                 tmpAnimes[0].provider = "migu";
                 tmpAnimes[0].mediaId = `https://v3-sc.miguvideo.com/program/v4/cont/content-info/${epId}/1`;
-                await this.miguSource.handleAnimes(tmpAnimes, response.data?.title, doubanAnimes, detailStore)
+                await this.miguSource.handleAnimes(tmpAnimes, response.data?.title, localDoubanAnimes, handleOptions)
               }
               break;
             }
           }
         }
-        return results;
+        return localDoubanAnimes.length > 0 ? localDoubanAnimes : results;
       } catch (error) {
         log("error", `[Douban] Error processing anime: ${error.message}`);
         return [];
       }
-    }));
+      }
+    );
+
+    for (const sourceResults of processDoubanAnimes) {
+      if (Array.isArray(sourceResults)) {
+        doubanAnimes.push(...sourceResults);
+      }
+    }
 
     this.sortAndPushAnimesByYear(doubanAnimes, curAnimes);
     return processDoubanAnimes;

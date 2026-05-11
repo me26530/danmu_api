@@ -5,8 +5,9 @@ import { httpGet, buildQueryString } from "../utils/http-util.js";
 import { convertToAsciiSum } from "../utils/codec-util.js";
 import { generateValidStartDate } from "../utils/time-util.js";
 import { addAnime, removeEarliestAnime } from "../utils/cache-util.js";
-import { printFirst200Chars, titleMatches } from "../utils/common-util.js";
+import { preferSeasonCandidatesIfPresent, printFirst200Chars, resolveQuerySeason, titleMatches } from "../utils/common-util.js";
 import { SegmentListResponse } from '../models/dandan-model.js';
+import { mapWithConcurrency, resolveSourceConcurrency } from '../utils/concurrency-util.js';
 
 // 媒体类型映射
 const typeMap = {
@@ -504,9 +505,14 @@ export default class LeshiSource extends BaseSource {
     }
 
     // 使用 map 和 async 时需要返回 Promise 数组，并等待所有 Promise 完成
-    const processLeshiAnimes = await Promise.all(sourceAnimes
-      .filter(s => titleMatches(s.title, queryTitle))
-      .map(async (anime) => {
+    const querySeason = resolveQuerySeason(queryTitle, detailStore);
+    const seasonPreferredAnimes = preferSeasonCandidatesIfPresent(sourceAnimes, querySeason, anime => anime.title || '');
+
+    const matchedAnimes = seasonPreferredAnimes.filter(s => titleMatches(s.title, queryTitle));
+    const processedPayloads = await mapWithConcurrency(
+      matchedAnimes,
+      resolveSourceConcurrency('leshi', globals),
+      async (anime) => {
         try {
           const eps = await this.getEpisodes(anime.mediaId);
           let links = [];
@@ -521,38 +527,43 @@ export default class LeshiSource extends BaseSource {
             });
           }
 
-          if (links.length > 0) {
-            // 将字符串mediaId转换为数字ID (使用哈希函数)
-            const numericAnimeId = convertToAsciiSum(anime.mediaId);
-            let transformedAnime = {
-              animeId: numericAnimeId,
-              bangumiId: anime.mediaId,
-              animeTitle: `${anime.title}(${anime.year || new Date().getFullYear()})【${anime.type}】from leshi`,
-              type: anime.type,
-              typeDescription: anime.type,
-              imageUrl: anime.imageUrl,
-              startDate: generateValidStartDate(anime.year || new Date().getFullYear()),
-              episodeCount: links.length,
-              rating: 0,
-              isFavorited: true,
-              source: "leshi",
-            };
+          if (links.length === 0) return null;
 
-            tmpAnimes.push(transformedAnime);
+          // 将字符串mediaId转换为数字ID (使用哈希函数)
+          const numericAnimeId = convertToAsciiSum(anime.mediaId);
+          const transformedAnime = {
+            animeId: numericAnimeId,
+            bangumiId: anime.mediaId,
+            animeTitle: `${anime.title}(${anime.year || new Date().getFullYear()})【${anime.type}】from leshi`,
+            type: anime.type,
+            typeDescription: anime.type,
+            imageUrl: anime.imageUrl,
+            startDate: generateValidStartDate(anime.year || new Date().getFullYear()),
+            episodeCount: links.length,
+            rating: 0,
+            isFavorited: true,
+            source: "leshi",
+          };
 
-            addAnime({...transformedAnime, links: links}, detailStore);
-
-            if (globals.animes.length > globals.MAX_ANIMES) removeEarliestAnime();
-          }
+          return { transformedAnime, links };
         } catch (error) {
           log("error", `[Leshi] Error processing anime: ${error.message}`);
+          return null;
         }
-      })
+      }
     );
+
+    for (const payload of processedPayloads) {
+      if (!payload) continue;
+      const { transformedAnime, links } = payload;
+      tmpAnimes.push(transformedAnime);
+      addAnime({ ...transformedAnime, links }, detailStore);
+      if (globals.animes.length > globals.MAX_ANIMES) removeEarliestAnime();
+    }
 
     this.sortAndPushAnimesByYear(tmpAnimes, curAnimes);
 
-    return processLeshiAnimes;
+    return processedPayloads;
   }
 
   async getEpisodeDanmu(id) {

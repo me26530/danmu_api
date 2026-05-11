@@ -4,7 +4,8 @@ import { log } from "../utils/log-util.js";
 import { httpGet } from "../utils/http-util.js";
 import { generateValidStartDate } from "../utils/time-util.js";
 import { addAnime, removeEarliestAnime } from "../utils/cache-util.js";
-import { titleMatches } from "../utils/common-util.js";
+import { preferSeasonCandidatesIfPresent, resolveQuerySeason, titleMatches } from "../utils/common-util.js";
+import { mapWithConcurrency, resolveSourceConcurrency } from '../utils/concurrency-util.js';
 
 // =====================
 // 获取360看源播放链接
@@ -221,9 +222,14 @@ export default class Kan360Source extends BaseSource {
       return [];
     }
 
-    const process360Animes = await Promise.all(sourceAnimes
-      .filter(anime => titleMatches(anime.titleTxt, queryTitle))
-      .map(async (anime) => {
+    const querySeason = resolveQuerySeason(queryTitle, detailStore);
+    const seasonPreferredAnimes = preferSeasonCandidatesIfPresent(sourceAnimes, querySeason, anime => anime.title || anime.name || '');
+
+    const matchedAnimes = seasonPreferredAnimes.filter(anime => titleMatches(anime.titleTxt, queryTitle));
+    const processedPayloads = await mapWithConcurrency(
+      matchedAnimes,
+      resolveSourceConcurrency('360', globals),
+      async (anime) => {
         try {
           let links = [];
           if (anime.cat_name === "电影") {
@@ -241,9 +247,6 @@ export default class Kan360Source extends BaseSource {
             let cat = 0;
             if (anime.cat_name === '电视剧') cat = 2;
             else if (anime.cat_name === '动漫') cat = 4;
-
-            // 获取总集数（若 seriesPlaylinks 为空或不存在时使用）
-            let number = null;
 
             // 尝试使用 seriesPlaylinks（常规情况）
             if (Array.isArray(anime.seriesPlaylinks) && anime.seriesPlaylinks.length > 0) {
@@ -298,49 +301,58 @@ export default class Kan360Source extends BaseSource {
               }
             }
           } else if (anime.cat_name === "综艺") {
-            const zongyiLinks = await Promise.all(
-                Object.keys(anime.playlinks_year).map(async (site) => {
-                  if (globals.vodAllowedPlatforms.includes(site)) {
-                    const yearLinks = await Promise.all(
-                        anime.playlinks_year[site].map(async (year) => {
-                          return await this.get360Zongyi(anime.titleTxt, anime.id, site, year);
-                        })
-                    );
-                    return yearLinks.flat(); // 将每个年份的子链接合并到一个数组
-                  }
-                  return [];
-                })
+            const zongyiLinks = await mapWithConcurrency(
+              Object.keys(anime.playlinks_year),
+              resolveSourceConcurrency('360', globals),
+              async (site) => {
+                if (globals.vodAllowedPlatforms.includes(site)) {
+                  const yearLinks = await mapWithConcurrency(
+                    anime.playlinks_year[site],
+                    resolveSourceConcurrency('360', globals),
+                    async (year) => await this.get360Zongyi(anime.titleTxt, anime.id, site, year)
+                  );
+                  return yearLinks.flat(); // 将每个年份的子链接合并到一个数组
+                }
+                return [];
+              }
             );
             links = zongyiLinks.flat(); // 扁平化所有返回的子链接
           }
 
-          if (links.length > 0) {
-            let transformedAnime = {
-              animeId: Number(anime.id),
-              bangumiId: String(anime.id),
-              animeTitle: `${anime.titleTxt}(${anime.year})【${anime.cat_name}】from 360`,
-              type: anime.cat_name,
-              typeDescription: anime.cat_name,
-              imageUrl: anime.cover,
-              startDate: generateValidStartDate(anime.year),
-              episodeCount: links.length,
-              rating: 0,
-              isFavorited: true,
-              source: "360",
-            };
+          if (links.length === 0) return null;
 
-            tmpAnimes.push(transformedAnime);
-            addAnime({...transformedAnime, links: links}, detailStore);
-            if (globals.animes.length > globals.MAX_ANIMES) removeEarliestAnime();
-          }
+          const transformedAnime = {
+            animeId: Number(anime.id),
+            bangumiId: String(anime.id),
+            animeTitle: `${anime.titleTxt}(${anime.year})【${anime.cat_name}】from 360`,
+            type: anime.cat_name,
+            typeDescription: anime.cat_name,
+            imageUrl: anime.cover,
+            startDate: generateValidStartDate(anime.year),
+            episodeCount: links.length,
+            rating: 0,
+            isFavorited: true,
+            source: "360",
+          };
+
+          return { anime: transformedAnime, links };
         } catch (error) {
           log("error", `[360kan] Error processing anime: ${error.message}`);
+          return null;
         }
-      }));
+      }
+    );
+
+    for (const payload of processedPayloads) {
+      if (!payload) continue;
+      tmpAnimes.push(payload.anime);
+      addAnime({...payload.anime, links: payload.links}, detailStore);
+      if (globals.animes.length > globals.MAX_ANIMES) removeEarliestAnime();
+    }
 
     this.sortAndPushAnimesByYear(tmpAnimes, curAnimes);
 
-    return process360Animes;
+    return processedPayloads;
   }
 
   async getEpisodeDanmu(id) {}

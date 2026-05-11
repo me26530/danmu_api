@@ -5,8 +5,9 @@ import { httpGet } from "../utils/http-util.js";
 import { convertToAsciiSum } from "../utils/codec-util.js";
 import { generateValidStartDate } from "../utils/time-util.js";
 import { addAnime, removeEarliestAnime } from "../utils/cache-util.js";
-import { titleMatches } from "../utils/common-util.js";
+import { preferSeasonCandidatesIfPresent, resolveQuerySeason, titleMatches } from "../utils/common-util.js";
 import { SegmentListResponse } from '../models/dandan-model.js';
+import { mapWithConcurrency, resolveSourceConcurrency } from '../utils/concurrency-util.js';
 import {
   HANJUTV_APP_PROFILE,
   HANJUTV_FULL_EPISODE_FALLBACK_SEGMENT_DATA,
@@ -628,23 +629,31 @@ export default class HanjutvSource extends BaseSource {
     }
 
     const tmpAnimes = [];
+    const querySeason = resolveQuerySeason(queryTitle, detailStore);
+    const seasonPreferredAnimes = preferSeasonCandidatesIfPresent(sourceAnimes, querySeason, anime => anime.name || '');
 
-    await Promise.all(
-      sourceAnimes
-        .filter(s => titleMatches(s.name, queryTitle))
-        .map(async (anime) => {
+    const matchedAnimes = seasonPreferredAnimes.filter(s => titleMatches(s.name, queryTitle));
+    const processedPayloads = await mapWithConcurrency(
+      matchedAnimes,
+      resolveSourceConcurrency('hanjutv', globals),
+      async (anime) => {
           try {
             const payload = await this.buildAnimePayload(anime);
-            if (!payload || !payload.summary || !Array.isArray(payload.links) || payload.links.length === 0) return;
-
-            tmpAnimes.push(payload.summary);
-            addAnime({ ...payload.summary, links: payload.links }, detailStore);
-            if (globals.animes.length > globals.MAX_ANIMES) removeEarliestAnime();
+            if (!payload || !payload.summary || !Array.isArray(payload.links) || payload.links.length === 0) return null;
+            return payload;
           } catch (error) {
             log("error", `[Hanjutv] Error processing anime: ${error.message}`);
+            return null;
           }
-        })
+        }
     );
+
+    for (const payload of processedPayloads) {
+      if (!payload) continue;
+      tmpAnimes.push(payload.summary);
+      addAnime({ ...payload.summary, links: payload.links }, detailStore);
+      if (globals.animes.length > globals.MAX_ANIMES) removeEarliestAnime();
+    }
 
     this.sortAndPushAnimesByYear(tmpAnimes, curAnimes);
     return tmpAnimes;

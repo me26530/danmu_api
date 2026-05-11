@@ -6,9 +6,10 @@ import { generateValidStartDate } from "../utils/time-util.js";
 import { addAnime, removeEarliestAnime } from "../utils/cache-util.js";
 import { simplized, traditionalized } from "../utils/zh-util.js";
 import { getTmdbJaOriginalTitle, smartTitleReplace } from "../utils/tmdb-util.js";
-import { strictTitleMatch, normalizeSpaces, getExplicitSeasonNumber, extractSeasonNumberFromAnimeTitle } from "../utils/common-util.js";
+import { strictTitleMatch, normalizeSpaces, getExplicitSeasonNumber, extractSeasonNumberFromAnimeTitle, preferSeasonCandidatesIfPresent, resolveQuerySeason } from "../utils/common-util.js";
 import { SegmentListResponse } from '../models/dandan-model.js';
 import { searchBangumiData } from '../utils/bangumi-data-util.js';
+import { mapWithConcurrency, resolveSourceConcurrency } from '../utils/concurrency-util.js';
 
 // =====================
 // 获取巴哈姆特弹幕
@@ -336,54 +337,49 @@ export default class BahamutSource extends BaseSource {
     const cnAlias = filtered.length > 0 ? filtered[0]._tmdbCnAlias : null;
     smartTitleReplace(filtered, cnAlias);
 
-    // 提取搜索词中的明确季度信息
-    const querySeason = getExplicitSeasonNumber(queryTitle);
+    // 提取搜索词中的明确季度信息；优先使用调度层传入的 SearchContext。
+    const querySeason = resolveQuerySeason(queryTitle, detailStore);
 
     // 初始列表预过滤机制：若用户指定了季度，优先检查初始结果中是否已包含匹配项
-    let matchedAnimes = filtered;
+    let matchedAnimes = preferSeasonCandidatesIfPresent(
+      filtered,
+      querySeason,
+      anime => anime._displayTitle || anime.title || ''
+    );
 
-    if (querySeason !== null) {
-      const seasonFiltered = filtered.filter(anime => {
-        const titleToCheck = anime._displayTitle || anime.title;
-        const s = extractSeasonNumberFromAnimeTitle(titleToCheck).season;
-        return s === querySeason || (querySeason === 1 && s === null);
-      });
-
-      // 如果已命中目标，减少详情请求量
-      if (seasonFiltered.length > 0) {
-        matchedAnimes = seasonFiltered;
-        log("info", `[Bahamut] 结果已命中目标季(第${querySeason}季)，跳过非目标季相关请求`);
-      }
+    if (matchedAnimes !== filtered) {
+      log("info", `[Bahamut] 结果已命中目标季(第${querySeason}季)，跳过非目标季相关请求`);
     }
 
-    // 使用 map 和 async 时需要返回 Promise 数组，并等待所有 Promise 完成
-    const processBahamutAnimes = await Promise.all(matchedAnimes.map(async (anime) => {
-      try {
-        const epData = await this.getEpisodes(anime.video_sn);
-        const detail = epData.video;
+    const processedPayloads = await mapWithConcurrency(
+      matchedAnimes,
+      resolveSourceConcurrency('bahamut', globals),
+      async (anime) => {
+        try {
+          const epData = await this.getEpisodes(anime.video_sn);
+          const detail = epData.video;
 
-        // 处理 episodes 对象中的多个键（"0", "1", "2" 等）
-        // 某些内容（如电影）可能在不同的键中
-        let eps = null;
-        if (epData.anime.episodes) {
-          // 优先使用 "0" 键，如果不存在则使用第一个可用的键
-          eps = epData.anime.episodes["0"] || Object.values(epData.anime.episodes)[0];
-        }
-
-        let links = [];
-        if (eps && Array.isArray(eps)) {
-          for (const ep of eps) {
-            const epTitle = `第${ep.episode}集`;
-            links.push({
-              "name": ep.episode.toString(),
-              "url": ep.videoSn.toString(),
-              "title": `【bahamut】 ${epTitle}`
-            });
+          // 处理 episodes 对象中的多个键（"0", "1", "2" 等）
+          // 某些内容（如电影）可能在不同的键中
+          let eps = null;
+          if (epData.anime.episodes) {
+            // 优先使用 "0" 键，如果不存在则使用第一个可用的键
+            eps = epData.anime.episodes["0"] || Object.values(epData.anime.episodes)[0];
           }
-        }
 
-        if (links.length > 0) {
-          let yearMatch = (anime.info || "").match(/(\d{4})/);
+          let links = [];
+          if (eps && Array.isArray(eps)) {
+            for (const ep of eps) {
+              const epTitle = `第${ep.episode}集`;
+              links.push({
+                "name": ep.episode.toString(),
+                "url": ep.videoSn.toString(),
+                "title": `【bahamut】 ${epTitle}`
+              });
+            }
+          }
+
+          if (links.length === 0) return null;
 
           // 优先使用tmdb智能标题替换的标题，否则简转繁处理原标题
           const displayTitle = anime._displayTitle || simplized(anime.title);
@@ -404,7 +400,7 @@ export default class BahamutSource extends BaseSource {
             itemType = "OVA";
           }
 
-          let transformedAnime = {
+          const transformedAnime = {
             animeId: anime.video_sn,
             bangumiId: String(anime.video_sn),
             animeTitle: `${displayTitle}(${(anime.info.match(/(\d{4})/) || [null])[0]})【${itemType}】from bahamut`,
@@ -419,20 +415,24 @@ export default class BahamutSource extends BaseSource {
             source: "bahamut",
           };
 
-          tmpAnimes.push(transformedAnime);
-
-          addAnime({...transformedAnime, links: links}, detailStore);
-
-          if (globals.animes.length > globals.MAX_ANIMES) removeEarliestAnime();
+          return { anime: transformedAnime, links };
+        } catch (error) {
+          log("error", `[Bahamut] Error processing anime: ${error.message}`);
+          return null;
         }
-      } catch (error) {
-        log("error", `[Bahamut] Error processing anime: ${error.message}`);
       }
-    }));
+    );
+
+    for (const payload of processedPayloads) {
+      if (!payload) continue;
+      tmpAnimes.push(payload.anime);
+      addAnime({...payload.anime, links: payload.links}, detailStore);
+      if (globals.animes.length > globals.MAX_ANIMES) removeEarliestAnime();
+    }
 
     this.sortAndPushAnimesByYear(tmpAnimes, curAnimes);
 
-    return processBahamutAnimes;
+    return processedPayloads;
   }
 
   async getEpisodeDanmu(id) {

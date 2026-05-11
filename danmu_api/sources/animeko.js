@@ -5,8 +5,9 @@ import { httpGet, httpPost } from "../utils/http-util.js";
 import { addAnime, removeEarliestAnime } from "../utils/cache-util.js";
 import { simplized } from "../utils/zh-util.js";
 import { SegmentListResponse } from '../models/dandan-model.js';
-import { titleMatches } from "../utils/common-util.js";
+import { preferSeasonCandidatesIfPresent, resolveQuerySeason, titleMatches } from "../utils/common-util.js";
 import { searchBangumiData } from '../utils/bangumi-data-util.js';
+import { mapWithConcurrency, resolveSourceConcurrency } from '../utils/concurrency-util.js';
 
 // =====================
 // 获取Animeko弹幕（https://github.com/open-ani/animeko）
@@ -399,7 +400,17 @@ export default class AnimekoSource extends BaseSource {
       return [];
     }
 
-    const processAnimekoAnimes = await Promise.all(sourceAnimes.map(async (anime) => {
+    const querySeason = resolveQuerySeason(queryTitle, detailStore);
+    const seasonPreferredAnimes = preferSeasonCandidatesIfPresent(
+      sourceAnimes,
+      querySeason,
+      anime => anime.name_cn || anime.name || ''
+    );
+
+    const processedPayloads = await mapWithConcurrency(
+      seasonPreferredAnimes,
+      resolveSourceConcurrency('animeko', globals),
+      async (anime) => {
         try {
           const eps = await this.getEpisodes(anime.id);
           let links = [];
@@ -428,37 +439,43 @@ export default class AnimekoSource extends BaseSource {
             }
           }
 
-          if (links.length > 0) {
-            const yearStr = effectiveStartDate ? new Date(effectiveStartDate).getFullYear() : "";
+          if (links.length === 0) return null;
 
-            let transformedAnime = {
-              animeId: anime.id,
-              bangumiId: String(anime.id),
-              animeTitle: `${anime.name_cn || anime.name}(${yearStr})【${anime.typeDescription || '动漫'}】from animeko`,
-              aliases: anime.aliases || [],
-              type: "动漫",
-              typeDescription: anime.typeDescription || "动漫",
-              imageUrl: anime.images ? (anime.images.common || anime.images.large) : "",
-              startDate: effectiveStartDate,
-              episodeCount: links.length,
-              rating: anime.score || 0,
-              isFavorited: true,
-              source: "animeko",
-            };
+          const yearStr = effectiveStartDate ? new Date(effectiveStartDate).getFullYear() : "";
 
-            tmpAnimes.push(transformedAnime);
-            addAnime({...transformedAnime, links: links}, detailStore);
+          const transformedAnime = {
+            animeId: anime.id,
+            bangumiId: String(anime.id),
+            animeTitle: `${anime.name_cn || anime.name}(${yearStr})【${anime.typeDescription || '动漫'}】from animeko`,
+            aliases: anime.aliases || [],
+            type: "动漫",
+            typeDescription: anime.typeDescription || "动漫",
+            imageUrl: anime.images ? (anime.images.common || anime.images.large) : "",
+            startDate: effectiveStartDate,
+            episodeCount: links.length,
+            rating: anime.score || 0,
+            isFavorited: true,
+            source: "animeko",
+          };
 
-            if (globals.animes.length > globals.MAX_ANIMES) removeEarliestAnime();
-          }
+          return { transformedAnime, links };
         } catch (error) {
           log("error", `[Animeko] Error processing anime ${anime.id}: ${error.message}`);
+          return null;
         }
-      })
+      }
     );
 
+    for (const payload of processedPayloads) {
+      if (!payload) continue;
+      const { transformedAnime, links } = payload;
+      tmpAnimes.push(transformedAnime);
+      addAnime({ ...transformedAnime, links }, detailStore);
+      if (globals.animes.length > globals.MAX_ANIMES) removeEarliestAnime();
+    }
+
     this.sortAndPushAnimesByYear(tmpAnimes, curAnimes);
-    return processAnimekoAnimes;
+    return processedPayloads;
   }
 
   /**

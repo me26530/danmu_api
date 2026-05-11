@@ -5,8 +5,9 @@ import { httpGet, httpPost } from "../utils/http-util.js";
 import { convertToAsciiSum } from "../utils/codec-util.js";
 import { generateValidStartDate } from "../utils/time-util.js";
 import { addAnime, removeEarliestAnime } from "../utils/cache-util.js";
-import { printFirst200Chars, titleMatches } from "../utils/common-util.js";
+import { preferSeasonCandidatesIfPresent, printFirst200Chars, resolveQuerySeason, titleMatches } from "../utils/common-util.js";
 import { SegmentListResponse } from '../models/dandan-model.js';
+import { mapWithConcurrency, resolveSourceConcurrency } from '../utils/concurrency-util.js';
 
 // =====================
 // 获取腾讯视频弹幕
@@ -420,10 +421,15 @@ export default class TencentSource extends BaseSource {
       return [];
     }
 
-    // 使用 map 和 async 时需要返回 Promise 数组，并等待所有 Promise 完成
-    const processTencentAnimes = await Promise.all(sourceAnimes
-      .filter(s => this.titleOrAliasMatches(s, queryTitle))
-      .map(async (anime) => {
+    const querySeason = resolveQuerySeason(queryTitle, detailStore);
+    const seasonPreferredAnimes = preferSeasonCandidatesIfPresent(sourceAnimes, querySeason, anime => anime.title || '');
+
+    // 限制详情请求并发；mapWithConcurrency 会按输入顺序返回，后续落库也按候选顺序执行
+    const matchedAnimes = seasonPreferredAnimes.filter(s => this.titleOrAliasMatches(s, queryTitle));
+    const processedPayloads = await mapWithConcurrency(
+      matchedAnimes,
+      resolveSourceConcurrency('tencent', globals),
+      async (anime) => {
         try {
           const eps = await this.getEpisodes(anime.mediaId);
           let links = [];
@@ -440,46 +446,50 @@ export default class TencentSource extends BaseSource {
             });
           }
 
-          if (links.length > 0) {
-            const firstEpTitle = eps[0].unionTitle || eps[0].title || "第1集";
-            let displayTitle = anime.title;
-            const versionMatch = firstEpTitle.match(/\[.+版\]/);
-            if (versionMatch && firstEpTitle.includes(anime.title)) {
-              displayTitle = `${anime.title}${versionMatch[0]}`;
-            }
+          if (links.length === 0) return null;
 
-            // 将字符串mediaId转换为数字ID (使用哈希函数)
-            const numericAnimeId = convertToAsciiSum(anime.mediaId);
-            let transformedAnime = {
-              animeId: numericAnimeId,
-              bangumiId: anime.mediaId,
-              animeTitle: `${displayTitle}(${anime.year})【${anime.type}】from tencent`,
-              type: anime.type,
-              typeDescription: anime.type,
-              imageUrl: anime.imageUrl,
-              startDate: generateValidStartDate(anime.year),
-              episodeCount: links.length,
-              rating: 0,
-              isFavorited: true,
-              source: "tencent",
-              aliases: anime.aliases || [],
-            };
-
-            tmpAnimes.push(transformedAnime);
-
-            addAnime({...transformedAnime, links: links}, detailStore);
-
-            if (globals.animes.length > globals.MAX_ANIMES) removeEarliestAnime();
+          const firstEpTitle = eps[0].unionTitle || eps[0].title || "第1集";
+          let displayTitle = anime.title;
+          const versionMatch = firstEpTitle.match(/\[.+版\]/);
+          if (versionMatch && firstEpTitle.includes(anime.title)) {
+            displayTitle = `${anime.title}${versionMatch[0]}`;
           }
+
+          // 将字符串mediaId转换为数字ID (使用哈希函数)
+          const numericAnimeId = convertToAsciiSum(anime.mediaId);
+          const transformedAnime = {
+            animeId: numericAnimeId,
+            bangumiId: anime.mediaId,
+            animeTitle: `${displayTitle}(${anime.year})【${anime.type}】from tencent`,
+            type: anime.type,
+            typeDescription: anime.type,
+            imageUrl: anime.imageUrl,
+            startDate: generateValidStartDate(anime.year),
+            episodeCount: links.length,
+            rating: 0,
+            isFavorited: true,
+            source: "tencent",
+            aliases: anime.aliases || [],
+          };
+
+          return { anime: transformedAnime, links };
         } catch (error) {
           log("error", `[Tencent] Error processing anime: ${error.message}`);
+          return null;
         }
-      })
+      }
     );
+
+    for (const payload of processedPayloads) {
+      if (!payload) continue;
+      tmpAnimes.push(payload.anime);
+      addAnime({...payload.anime, links: payload.links}, detailStore);
+      if (globals.animes.length > globals.MAX_ANIMES) removeEarliestAnime();
+    }
 
     this.sortAndPushAnimesByYear(tmpAnimes, curAnimes);
 
-    return processTencentAnimes;
+    return processedPayloads;
   }
 
   // 提取vid的公共函数

@@ -457,7 +457,7 @@ async function handleRequest(req, env, deployPlatform, clientIp, ctx) {
 
   // GET /api/v2/search/anime
   if (path === "/api/v2/search/anime" && method === "GET") {
-    return searchAnime(url);
+    return searchAnime(url, null, null, null, { lazySearch: parseBoolean(url.searchParams.get('lazy'), false) });
   }
 
   // GET /api/v2/search/episodes
@@ -477,7 +477,7 @@ async function handleRequest(req, env, deployPlatform, clientIp, ctx) {
 
   // GET /api/v2/bangumi/:animeId
   if (path.startsWith("/api/v2/bangumi/") && method === "GET") {
-    return getBangumi(path);
+    return getBangumi(path, null, url.searchParams.get('source'));
   }
 
   // GET /api/v2/comment/:commentId/duration

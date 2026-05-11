@@ -536,6 +536,49 @@ export function extractAnimeInfo(animeTitle, episodeTitle) {
 }
 
 /**
+ * 若候选中已出现目标季，则优先只保留目标季候选；若没有目标季候选，则回退原候选以避免漏结果。
+ * 第 1 季查询将无显式季标标题视为可用目标季，其它季查询只接受明确季标。
+ * @template T
+ * @param {T[]} candidates
+ * @param {number|null|undefined} querySeason
+ * @param {(candidate: T) => string} [getTitle]
+ * @returns {T[]}
+ */
+export function preferSeasonCandidatesIfPresent(candidates, querySeason, getTitle = item => item?.title || item?.name || item?.animeTitle || '') {
+  if (!Array.isArray(candidates)) return [];
+
+  const season = Number(querySeason);
+  if (!Number.isInteger(season) || season <= 0) return candidates;
+
+  const seasonCandidates = candidates.filter(candidate => {
+    const title = getTitle(candidate);
+    const parsedSeason = extractSeasonNumberFromAnimeTitle(title).season;
+    if (season === 1) {
+      return parsedSeason === null || parsedSeason === 1;
+    }
+    return parsedSeason === season;
+  });
+
+  return seasonCandidates.length > 0 ? seasonCandidates : candidates;
+}
+
+/**
+ * 优先从 source options 读取 querySeason；没有显式上下文时回退解析搜索词。
+ * @param {string} queryTitle
+ * @param {object|Map|null} options
+ * @returns {number|null}
+ */
+export function resolveQuerySeason(queryTitle, options = null) {
+  if (options && !(options instanceof Map) && typeof options === 'object') {
+    const season = Number(options.querySeason);
+    if (Number.isInteger(season) && season > 0) {
+      return season;
+    }
+  }
+  return getExplicitSeasonNumber(queryTitle);
+}
+
+/**
  * 标题匹配路由函数：支持严格模式，或 宽松模式下的"包含+相似度"混合策略
  * @param {string} title - 动漫标题
  * @param {string} query - 搜索关键词

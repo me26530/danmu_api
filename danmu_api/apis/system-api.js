@@ -243,6 +243,7 @@ export async function handleClearCache() {
     globals.commentCache = new Map();
     globals.animeDetailsCache = new Map();
     globals.episodeDetailsCache = new Map();
+    globals.lazyDetailDescriptors = new Map();
     globals.requestHistory = new Map();
     
     log("info", `[server] Memory cache cleared successfully`);
@@ -291,6 +292,7 @@ export async function handleClearCache() {
       commentCache: 0,
       animeDetailsCache: 0,
       episodeDetailsCache: 0,
+      lazyDetailDescriptors: 0,
       requestHistory: 0,
       reqRecords: 0,
       todayReqNum: 0

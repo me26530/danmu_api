@@ -6,8 +6,9 @@ import { autoDecode } from "../utils/codec-util.js";
 import { createHmacSha256, generateSign } from "../utils/crypto-util.js";
 import { generateValidStartDate } from "../utils/time-util.js";
 import { addAnime, removeEarliestAnime } from "../utils/cache-util.js";
-import { titleMatches } from "../utils/common-util.js";
+import { preferSeasonCandidatesIfPresent, resolveQuerySeason, titleMatches } from "../utils/common-util.js";
 import { SegmentListResponse } from '../models/dandan-model.js';
+import { mapWithConcurrency, resolveSourceConcurrency } from '../utils/concurrency-util.js';
 
 // =====================
 // 获取人人视频弹幕
@@ -501,9 +502,14 @@ export default class RenrenSource extends BaseSource {
     this.isBatchMode = true;
     
     try {
-      await Promise.all(sourceAnimes
-        .filter(s => titleMatches(s.title, queryTitle))
-        .map(async (anime) => {
+      const querySeason = resolveQuerySeason(queryTitle, detailStore);
+      const seasonPreferredAnimes = preferSeasonCandidatesIfPresent(sourceAnimes, querySeason, anime => anime.title || '');
+
+      const matchedAnimes = seasonPreferredAnimes.filter(s => titleMatches(s.title, queryTitle));
+      const processedPayloads = await mapWithConcurrency(
+        matchedAnimes,
+        resolveSourceConcurrency('renren', globals),
+        async (anime) => {
           try {
             // 在此块中调用的 getEpisodes -> ... -> getAliId
             // 会因为 isBatchMode=true 而直接返回缓存ID，不增加计数
@@ -518,33 +524,38 @@ export default class RenrenSource extends BaseSource {
               });
             }
 
-            if (links.length > 0) {
-              let transformedAnime = {
-                animeId: Number(anime.mediaId),
-                bangumiId: String(anime.mediaId),
-                animeTitle: `${anime.title}(${anime.year})【${anime.type}】from renren`,
-                type: anime.type,
-                typeDescription: anime.type,
-                imageUrl: anime.imageUrl,
-                startDate: generateValidStartDate(anime.year),
-                episodeCount: links.length,
-                rating: 0,
-                isFavorited: true,
-                source: "renren",
-              };
+            if (links.length === 0) return null;
 
-              tmpAnimes.push(transformedAnime);
-              addAnime({ ...transformedAnime, links: links }, detailStore);
+            const transformedAnime = {
+              animeId: Number(anime.mediaId),
+              bangumiId: String(anime.mediaId),
+              animeTitle: `${anime.title}(${anime.year})【${anime.type}】from renren`,
+              type: anime.type,
+              typeDescription: anime.type,
+              imageUrl: anime.imageUrl,
+              startDate: generateValidStartDate(anime.year),
+              episodeCount: links.length,
+              rating: 0,
+              isFavorited: true,
+              source: "renren",
+            };
 
-              if (globals.animes.length > globals.MAX_ANIMES) {
-                removeEarliestAnime();
-              }
-            }
+            return { anime: transformedAnime, links };
           } catch (error) {
             log("info", `[Renren] Error processing anime: ${error.message}`);
+            return null;
           }
-        })
+        }
       );
+
+      for (const payload of processedPayloads) {
+        if (!payload) continue;
+        tmpAnimes.push(payload.anime);
+        addAnime({ ...payload.anime, links: payload.links }, detailStore);
+        if (globals.animes.length > globals.MAX_ANIMES) {
+          removeEarliestAnime();
+        }
+      }
     } finally {
       // [标记结束] 退出批量模式
       this.isBatchMode = false;

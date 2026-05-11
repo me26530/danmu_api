@@ -4,7 +4,9 @@ import { log } from '../utils/log-util.js';
 import { httpGet } from '../utils/http-util.js';
 import { addAnime, removeEarliestAnime } from '../utils/cache-util.js';
 import { simplized } from '../utils/zh-util.js';
+import { preferSeasonCandidatesIfPresent, resolveQuerySeason } from '../utils/common-util.js';
 import { SegmentListResponse } from '../models/dandan-model.js';
+import { mapWithConcurrency, resolveSourceConcurrency } from '../utils/concurrency-util.js';
 
 const EZDMW_BASE_URL = 'https://m.ezdmw.site';
 const EZDMW_PLAYER_BASE_URL = 'https://player.ezdmw.com';
@@ -334,10 +336,16 @@ export default class EzdmwSource extends BaseSource {
     const tmpAnimes = [];
     if (!Array.isArray(sourceAnimes) || sourceAnimes.length === 0) return [];
 
-    const tasks = sourceAnimes.map(async (anime) => {
+    const querySeason = resolveQuerySeason(queryTitle, detailStore);
+    const seasonPreferredAnimes = preferSeasonCandidatesIfPresent(sourceAnimes, querySeason, anime => anime.title || anime.name || '');
+
+    const processedPayloads = await mapWithConcurrency(
+      seasonPreferredAnimes,
+      resolveSourceConcurrency('ezdmw', globals),
+      async (anime) => {
       try {
         const id = String(anime?.id || anime?.bangumiId || '').trim();
-        if (!id) return;
+        if (!id) return null;
 
         const detail = await this.getBangumiDetail(id);
         const links = (detail.episodes || []).map((ep, index) => {
@@ -349,7 +357,7 @@ export default class EzdmwSource extends BaseSource {
           };
         });
 
-        if (links.length === 0) return;
+        if (links.length === 0) return null;
 
         const title = detail.title || anime.title || queryTitle || `ezdmw-${id}`;
         const year = detail.year && detail.year !== 'N/A' ? detail.year : extractYear(detail.startDate || detail.description || title);
@@ -368,17 +376,24 @@ export default class EzdmwSource extends BaseSource {
           source: 'ezdmw',
         };
 
-        tmpAnimes.push(transformedAnime);
-        addAnime({ ...transformedAnime, links }, detailStore);
-        if (globals.animes.length > globals.MAX_ANIMES) removeEarliestAnime();
+        return { transformedAnime, links };
       } catch (error) {
         log('warn', `[Ezdmw] 处理搜索结果失败: ${error.message}`);
+        return null;
       }
-    });
+      }
+    );
 
-    const processed = await Promise.all(tasks);
+    for (const payload of processedPayloads) {
+      if (!payload) continue;
+      const { transformedAnime, links } = payload;
+      tmpAnimes.push(transformedAnime);
+      addAnime({ ...transformedAnime, links }, detailStore);
+      if (globals.animes.length > globals.MAX_ANIMES) removeEarliestAnime();
+    }
+
     this.sortAndPushAnimesByYear(tmpAnimes, curAnimes);
-    return processed;
+    return processedPayloads;
   }
 
   async getEpisodeDanmu(id) {

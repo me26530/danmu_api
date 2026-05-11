@@ -7,8 +7,9 @@ import { hexToInt } from "../utils/danmu-util.js";
 import { generateValidStartDate, time_to_second } from "../utils/time-util.js";
 import { addAnime, removeEarliestAnime } from "../utils/cache-util.js";
 import { decrypt } from "../utils/migu-util.js";
-import { printFirst200Chars, titleMatches } from "../utils/common-util.js";
+import { preferSeasonCandidatesIfPresent, printFirst200Chars, resolveQuerySeason, titleMatches } from "../utils/common-util.js";
 import { SegmentListResponse } from '../models/dandan-model.js';
+import { mapWithConcurrency, resolveSourceConcurrency } from '../utils/concurrency-util.js';
 
 // =====================
 // 获取咪咕视频弹幕
@@ -191,9 +192,14 @@ class MiguSource extends BaseSource {
     }
 
     // 使用 map 和 async 时需要返回 Promise 数组，并等待所有 Promise 完成
-    const processMiguAnimes = await Promise.all(sourceAnimes
-      .filter(s => titleMatches(s.name || s.title, queryTitle))
-      .map(async (anime) => {
+    const querySeason = resolveQuerySeason(queryTitle, detailStore);
+    const seasonPreferredAnimes = preferSeasonCandidatesIfPresent(sourceAnimes, querySeason, anime => anime.name || anime.title || '');
+
+    const matchedAnimes = seasonPreferredAnimes.filter(s => titleMatches(s.name || s.title, queryTitle));
+    const processedPayloads = await mapWithConcurrency(
+      matchedAnimes,
+      resolveSourceConcurrency('migu', globals),
+      async (anime) => {
         try {
           const eps = await this.getEpisodes(anime.url || anime.mediaId);
           let links = [];
@@ -205,36 +211,41 @@ class MiguSource extends BaseSource {
             });
           }
 
-          if (links.length > 0) {
-            let transformedAnime = {
-              animeId: convertToAsciiSum(anime.epsId ?? eps[0]?.pID),
-              bangumiId: String(anime.epsId ?? eps[0]?.pID),
-              animeTitle: `${anime.name || anime.title}(${anime.year})【${anime.type}】from migu`,
-              type: anime.type,
-              typeDescription: anime.type,
-              imageUrl: anime.img ?? anime.imageUrl,
-              startDate: generateValidStartDate(anime.year),
-              episodeCount: links.length,
-              rating: 0,
-              isFavorited: true,
-              source: "migu",
-            };
+          if (links.length === 0) return null;
 
-            tmpAnimes.push(transformedAnime);
+          const transformedAnime = {
+            animeId: convertToAsciiSum(anime.epsId ?? eps[0]?.pID),
+            bangumiId: String(anime.epsId ?? eps[0]?.pID),
+            animeTitle: `${anime.name || anime.title}(${anime.year})【${anime.type}】from migu`,
+            type: anime.type,
+            typeDescription: anime.type,
+            imageUrl: anime.img ?? anime.imageUrl,
+            startDate: generateValidStartDate(anime.year),
+            episodeCount: links.length,
+            rating: 0,
+            isFavorited: true,
+            source: "migu",
+          };
 
-            addAnime({...transformedAnime, links: links}, detailStore);
-
-            if (globals.animes.length > globals.MAX_ANIMES) removeEarliestAnime();
-          }
+          return { transformedAnime, links };
         } catch (error) {
           log("error", `[Migu] Error processing anime: ${error.message}`);
+          return null;
         }
-      })
+      }
     );
+
+    for (const payload of processedPayloads) {
+      if (!payload) continue;
+      const { transformedAnime, links } = payload;
+      tmpAnimes.push(transformedAnime);
+      addAnime({ ...transformedAnime, links }, detailStore);
+      if (globals.animes.length > globals.MAX_ANIMES) removeEarliestAnime();
+    }
 
     this.sortAndPushAnimesByYear(tmpAnimes, curAnimes);
 
-    return processMiguAnimes;
+    return processedPayloads;
   }
 
   async getEpisodeDanmu(id) {

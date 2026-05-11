@@ -7,8 +7,9 @@ import { md5 } from "../utils/crypto-util.js";
 import { hexToInt } from "../utils/danmu-util.js";
 import { generateValidStartDate } from "../utils/time-util.js";
 import { addAnime, removeEarliestAnime } from "../utils/cache-util.js";
-import { printFirst200Chars, titleMatches } from "../utils/common-util.js";
+import { preferSeasonCandidatesIfPresent, printFirst200Chars, resolveQuerySeason, titleMatches } from "../utils/common-util.js";
 import { SegmentListResponse } from '../models/dandan-model.js';
+import { mapWithConcurrency, resolveSourceConcurrency } from '../utils/concurrency-util.js';
 
 // =====================
 // 获取埋堆堆弹幕
@@ -204,10 +205,14 @@ class MaiduiduiSource extends BaseSource {
       return [];
     }
 
-    // 使用 map 和 async 时需要返回 Promise 数组，并等待所有 Promise 完成
-    const processMaiduiduiAnimes = await Promise.all(sourceAnimes
-      .filter(s => titleMatches(s.name, queryTitle))
-      .map(async (anime) => {
+    const querySeason = resolveQuerySeason(queryTitle, detailStore);
+    const seasonPreferredAnimes = preferSeasonCandidatesIfPresent(sourceAnimes, querySeason, anime => anime.name || anime.title || '');
+
+    const matchedAnimes = seasonPreferredAnimes.filter(s => titleMatches(s.name, queryTitle));
+    const processedPayloads = await mapWithConcurrency(
+      matchedAnimes,
+      resolveSourceConcurrency('maiduidui', globals),
+      async (anime) => {
         try {
           const eps = await this.getEpisodes(anime.url);
           let links = [];
@@ -220,36 +225,40 @@ class MaiduiduiSource extends BaseSource {
             });
           }
 
-          if (links.length > 0) {
-            let transformedAnime = {
-              animeId: convertToAsciiSum(anime.url),
-              bangumiId: anime.url,
-              animeTitle: `${anime.name}(${anime.year})【${anime.type}】from maiduidui`,
-              type: anime.type,
-              typeDescription: anime.type,
-              imageUrl: anime.img,
-              startDate: generateValidStartDate(anime.year),
-              episodeCount: links.length,
-              rating: 0,
-              isFavorited: true,
-              source: "maiduidui",
-            };
+          if (links.length === 0) return null;
 
-            tmpAnimes.push(transformedAnime);
+          const transformedAnime = {
+            animeId: convertToAsciiSum(anime.url),
+            bangumiId: anime.url,
+            animeTitle: `${anime.name}(${anime.year})【${anime.type}】from maiduidui`,
+            type: anime.type,
+            typeDescription: anime.type,
+            imageUrl: anime.img,
+            startDate: generateValidStartDate(anime.year),
+            episodeCount: links.length,
+            rating: 0,
+            isFavorited: true,
+            source: "maiduidui",
+          };
 
-            addAnime({...transformedAnime, links: links}, detailStore);
-
-            if (globals.animes.length > globals.MAX_ANIMES) removeEarliestAnime();
-          }
+          return { anime: transformedAnime, links };
         } catch (error) {
           log("error", `[Maiduidui] Error processing anime: ${error.message}`);
+          return null;
         }
-      })
+      }
     );
+
+    for (const payload of processedPayloads) {
+      if (!payload) continue;
+      tmpAnimes.push(payload.anime);
+      addAnime({...payload.anime, links: payload.links}, detailStore);
+      if (globals.animes.length > globals.MAX_ANIMES) removeEarliestAnime();
+    }
 
     this.sortAndPushAnimesByYear(tmpAnimes, curAnimes);
 
-    return processMaiduiduiAnimes;
+    return processedPayloads;
   }
 
   async getEpisodeDanmu(id) {

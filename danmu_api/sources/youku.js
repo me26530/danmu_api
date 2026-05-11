@@ -2,12 +2,13 @@ import BaseSource from './base.js';
 import { globals } from '../configs/globals.js';
 import { log } from "../utils/log-util.js";
 import { buildQueryString, httpGet, httpPost } from "../utils/http-util.js";
-import { printFirst200Chars, titleMatches } from "../utils/common-util.js";
+import { preferSeasonCandidatesIfPresent, printFirst200Chars, resolveQuerySeason, titleMatches } from "../utils/common-util.js";
 import { convertToAsciiSum } from "../utils/codec-util.js";
 import { md5 } from "../utils/crypto-util.js";
 import { generateValidStartDate } from "../utils/time-util.js";
 import { addAnime, removeEarliestAnime } from "../utils/cache-util.js";
 import { SegmentListResponse } from '../models/dandan-model.js';
+import { mapWithConcurrency, resolveSourceConcurrency } from '../utils/concurrency-util.js';
 
 // =====================
 // 获取优酷弹幕
@@ -215,9 +216,14 @@ export default class YoukuSource extends BaseSource {
       return [];
     }
 
-    const processYoukuAnimes = await Promise.all(sourceAnimes
-      .filter(s => titleMatches(s.title, queryTitle))
-      .map(async (anime) => {
+    const querySeason = resolveQuerySeason(queryTitle, detailStore);
+    const seasonPreferredAnimes = preferSeasonCandidatesIfPresent(sourceAnimes, querySeason, anime => anime.title || '');
+
+    const matchedAnimes = seasonPreferredAnimes.filter(s => titleMatches(s.title, queryTitle));
+    const processedPayloads = await mapWithConcurrency(
+      matchedAnimes,
+      resolveSourceConcurrency('youku', globals),
+      async (anime) => {
         try {
           const eps = await this.getEpisodes(anime.mediaId);
 
@@ -237,35 +243,40 @@ export default class YoukuSource extends BaseSource {
             });
           }
 
-          if (links.length > 0) {
-            const numericAnimeId = convertToAsciiSum(anime.mediaId);
-            let transformedAnime = {
-              animeId: numericAnimeId,
-              bangumiId: anime.mediaId,
-              animeTitle: `${anime.title}(${anime.year || 'N/A'})【${anime.type}】from youku`,
-              type: anime.type,
-              typeDescription: anime.type,
-              imageUrl: anime.imageUrl,
-              startDate: generateValidStartDate(anime.year),
-              episodeCount: links.length,
-              rating: 0,
-              isFavorited: true,
-              source: "youku",
-            };
+          if (links.length === 0) return null;
 
-            tmpAnimes.push(transformedAnime);
-            addAnime({...transformedAnime, links: links}, detailStore);
+          const numericAnimeId = convertToAsciiSum(anime.mediaId);
+          const transformedAnime = {
+            animeId: numericAnimeId,
+            bangumiId: anime.mediaId,
+            animeTitle: `${anime.title}(${anime.year || 'N/A'})【${anime.type}】from youku`,
+            type: anime.type,
+            typeDescription: anime.type,
+            imageUrl: anime.imageUrl,
+            startDate: generateValidStartDate(anime.year),
+            episodeCount: links.length,
+            rating: 0,
+            isFavorited: true,
+            source: "youku",
+          };
 
-            if (globals.animes.length > globals.MAX_ANIMES) removeEarliestAnime();
-          }
+          return { anime: transformedAnime, links };
         } catch (error) {
           log("error", `[Youku] Error processing anime: ${error.message}`);
+          return null;
         }
-      })
+      }
     );
 
+    for (const payload of processedPayloads) {
+      if (!payload) continue;
+      tmpAnimes.push(payload.anime);
+      addAnime({...payload.anime, links: payload.links}, detailStore);
+      if (globals.animes.length > globals.MAX_ANIMES) removeEarliestAnime();
+    }
+
     this.sortAndPushAnimesByYear(tmpAnimes, curAnimes);
-    return processYoukuAnimes;
+    return processedPayloads;
   }
 
   /**

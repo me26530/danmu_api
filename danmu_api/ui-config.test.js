@@ -24,6 +24,22 @@ test('MATCH_PLATFORM_RULES config should parse valid platform order rules and ig
   ]);
 });
 
+test('SOURCE_DETAIL_CONCURRENCY config should parse global and per-source limits', () => {
+  const config = Globals.init({
+    SOURCE_DETAIL_CONCURRENCY: '6',
+    SOURCE_DETAIL_CONCURRENCY_BY_SOURCE: 'tencent:2,vod:3,bad,iqiyi:99,sohu:0'
+  });
+
+  assert.equal(config.sourceDetailConcurrency, 6);
+  assert.deepEqual(config.sourceDetailConcurrencyBySource, {
+    tencent: 2,
+    vod: 3,
+    iqiyi: 16,
+  });
+  assert.equal(config.envVarConfig.SOURCE_DETAIL_CONCURRENCY.type, 'number');
+  assert.equal(config.envVarConfig.SOURCE_DETAIL_CONCURRENCY_BY_SOURCE.type, 'map');
+});
+
 test('API test UI should expose a debug toggle for matchAnime', () => {
   assert.match(
     apitestJsContent,
