@@ -19,6 +19,42 @@ export default class IqiyiSource extends BaseSource {
   static SECRET_KEY = "howcuteitis";
   static KEY_NAME = "secret_key";
 
+  constructor() {
+    super();
+    this.searchDeviceId = this._createIqiyiSearchDeviceId();
+  }
+
+  _createIqiyiSearchDeviceId() {
+    return md5(`${Date.now()}_${Math.random()}_iqiyi`).slice(0, 32);
+  }
+
+  _buildSearchParams(keyword) {
+    return {
+      key: keyword,
+      current_page: '1',
+      mode: '1',
+      source: 'input',
+      suggest: '',
+      pcv: '17.052.25283',
+      version: '17.052.25283',
+      pageNum: '1',
+      pageSize: '25',
+      pu: '',
+      u: this.searchDeviceId,
+      scale: '300',
+      token: '',
+      userVip: '0',
+      conduit: '',
+      vipType: '-1',
+      os: '10.0',
+      osShortName: 'win10',
+      dataType: '',
+      appMode: '',
+      ad: JSON.stringify({"lm":3,"azd":1000000000951,"azt":733,"position":"feed"}),
+      adExt: JSON.stringify({"r":"2.17.0-ares6-pure"})
+    };
+  }
+
   /**
    * 搜索爱奇艺内容
    * @param {string} keyword - 搜索关键词
@@ -29,30 +65,7 @@ export default class IqiyiSource extends BaseSource {
       log("info", `[iQiyi] 开始搜索: ${keyword}`);
 
       // 使用桌面版 API 搜索
-      const params = {
-        key: keyword,
-        current_page: '1',
-        mode: '1',
-        source: 'input',
-        suggest: '',
-        pcv: '13.074.22699',
-        version: '13.074.22699',
-        pageNum: '1',
-        pageSize: '25',
-        pu: '',
-        u: 'f6440fc5d919dca1aea12b6aff56e1c7',
-        scale: '200',
-        token: '',
-        userVip: '0',
-        conduit: '',
-        vipType: '-1',
-        os: '',
-        osShortName: 'win10',
-        dataType: '',
-        appMode: '',
-        ad: JSON.stringify({"lm":3,"azd":1000000000951,"azt":733,"position":"feed"}),
-        adExt: JSON.stringify({"r":"2.1.5-ares6-pure"})
-      };
+      const params = this._buildSearchParams(keyword);
 
       // 手动构建 URL（httpGet 不支持 params 选项）
       const queryString = buildQueryString(params);
