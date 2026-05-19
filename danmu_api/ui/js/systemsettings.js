@@ -10,6 +10,28 @@ let isMergeMode = false;
 let stagingTags = [];
 let timelineOffsetSourceOptions = ['all'];
 
+function getEnvVariableValue(key) {
+    const currentKeyEl = document.getElementById('env-key');
+    const currentValueEl = document.getElementById('text-value');
+    if (currentKeyEl && currentValueEl && currentKeyEl.value === key) {
+        return String(currentValueEl.value || '').trim();
+    }
+
+    if (typeof envVariables === 'undefined' || !envVariables) {
+        return '';
+    }
+
+    for (const items of Object.values(envVariables)) {
+        if (!Array.isArray(items)) continue;
+        const item = items.find(entry => entry && entry.key === key);
+        if (item) {
+            return String(item.value || '').trim();
+        }
+    }
+
+    return '';
+}
+
 /* ========================================
    显示/隐藏清理缓存模态框
    ======================================== */
@@ -1518,8 +1540,22 @@ FFFFFF FF5733 00FF00"></textarea>
         
         if (isAiApiKey) {
             // AI API Key 专用编辑界面
+            const currentAiBaseUrl = getEnvVariableValue('AI_BASE_URL') || 'https://api.openai.com/v1';
+            const currentAiModel = getEnvVariableValue('AI_MODEL') || 'gpt-4o';
             container.innerHTML = \`
                 <div class="ai-apikey-editor">
+                    <div class="form-group ai-apikey-input-group">
+                        <label class="form-label" for="ai-verify-base-url">AI_BASE_URL（本次测试使用）</label>
+                        <input type="text" class="form-input" id="ai-verify-base-url" value="\${escapeHtml(currentAiBaseUrl)}" placeholder="https://api.openai.com/v1 或完整接口URL">
+                        <div class="form-help ai-apikey-help">用于连通性测试，不会在保存 API Key 时覆盖 AI_BASE_URL</div>
+                    </div>
+
+                    <div class="form-group ai-apikey-input-group">
+                        <label class="form-label" for="ai-verify-model">AI_MODEL（本次测试使用）</label>
+                        <input type="text" class="form-input" id="ai-verify-model" value="\${escapeHtml(currentAiModel)}" placeholder="gpt-4o / deepseek-reasoner / deepseek-chat">
+                        <div class="form-help ai-apikey-help">用于连通性测试，不会在保存 API Key 时覆盖 AI_MODEL</div>
+                    </div>
+
                     <div class="form-group ai-apikey-input-group">
                         <label class="form-label" for="text-value">API Key 值</label>
                         <textarea class="form-textarea ai-apikey-textarea" id="text-value" placeholder="请输入 AI API Key" rows="3">\${escapeHtml(value)}</textarea>
@@ -4100,12 +4136,26 @@ async function verifyAiConnection() {
     
     // 检查是否为脱敏后的 *...* 
     const isMasked = /^[*]+$/.test(apiKey);
+    const baseUrlInput = document.getElementById('ai-verify-base-url');
+    const modelInput = document.getElementById('ai-verify-model');
+    const currentAiBaseUrl = String((baseUrlInput && baseUrlInput.value) || getEnvVariableValue('AI_BASE_URL') || '').trim();
+    const currentAiModel = String((modelInput && modelInput.value) || getEnvVariableValue('AI_MODEL') || '').trim();
+    const verifyPayload = {};
+    if (!isMasked) {
+        verifyPayload.aiApiKey = apiKey;
+    }
+    if (currentAiBaseUrl) {
+        verifyPayload.aiBaseUrl = currentAiBaseUrl;
+    }
+    if (currentAiModel) {
+        verifyPayload.aiModel = currentAiModel;
+    }
     
     try {
         const response = await fetch(buildApiUrl('/api/ai/verify', true), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(isMasked ? {} : { 'aiApiKey': apiKey })
+            body: JSON.stringify(verifyPayload)
         });
         
         const result = await response.json();

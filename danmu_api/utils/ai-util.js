@@ -146,7 +146,7 @@ function extractTextFromContent(content) {
   return '';
 }
 
-function extractTextFromResponseData(data) {
+function extractTextFromResponseData(data, options = {}) {
   if (typeof data === 'string') {
     if (looksLikeHtmlDocument(data)) {
       throw new Error('接口返回了 HTML 页面，请检查 AI_BASE_URL 是否指向正确的 AI API 地址');
@@ -154,7 +154,7 @@ function extractTextFromResponseData(data) {
 
     const parsed = parsePossibleJsonText(data);
     if (parsed) {
-      return extractTextFromResponseData(parsed);
+      return extractTextFromResponseData(parsed, options);
     }
 
     return String(data || '').trim();
@@ -174,6 +174,12 @@ function extractTextFromResponseData(data) {
   const choiceContent = data?.choices?.[0]?.message?.content;
   const fromChoiceContent = extractTextFromContent(choiceContent).trim();
   if (fromChoiceContent) return fromChoiceContent;
+
+  if (options.allowReasoningContent) {
+    const reasoningContent = data?.choices?.[0]?.message?.reasoning_content;
+    const fromReasoningContent = extractTextFromContent(reasoningContent).trim();
+    if (fromReasoningContent) return fromReasoningContent;
+  }
 
   const fromChoiceText = typeof data?.choices?.[0]?.text === 'string'
     ? data.choices[0].text.trim()
@@ -298,7 +304,7 @@ export default class AIClient {
           throw new Error('接口返回 text/html，可能是网关管理页或错误路由');
         }
 
-        return extractTextFromResponseData(res.data);
+        return extractTextFromResponseData(res.data, options);
       } catch (error) {
         errors.push(`[${completionUrl}] ${error?.message || '未知错误'}`);
       }
@@ -348,7 +354,11 @@ export default class AIClient {
 
   async verify() {
     try {
-        const result = await this.ask('hi', { maxTokens: 1 })
+        const result = await this.ask('请只回复 OK，用于连通性测试。', {
+          maxTokens: 64,
+          temperature: 0,
+          allowReasoningContent: true,
+        })
         return { ok: true, reply: result }
     } catch (err) {
         return { ok: false, error: err.message }

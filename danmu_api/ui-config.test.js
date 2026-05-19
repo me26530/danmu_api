@@ -135,3 +135,14 @@ test('API test UI should send matchAnime debug as query string instead of JSON b
     /config\.method === 'POST' && apiKey === 'matchAnime'[\s\S]*queryParams\.debug = params\.debug[\s\S]*delete params\.debug/,
   );
 });
+
+test('AI API Key connection test should send current AI_BASE_URL and AI_MODEL values from the UI', () => {
+  assert.match(systemSettingsJsContent, /function\s+getEnvVariableValue\(key\)/);
+  assert.match(systemSettingsJsContent, /const\s+verifyPayload\s*=\s*\{\}/);
+  assert.match(systemSettingsJsContent, /getEnvVariableValue\('AI_BASE_URL'\)/);
+  assert.match(systemSettingsJsContent, /getEnvVariableValue\('AI_MODEL'\)/);
+  assert.match(systemSettingsJsContent, /verifyPayload\.aiBaseUrl\s*=\s*currentAiBaseUrl/);
+  assert.match(systemSettingsJsContent, /verifyPayload\.aiModel\s*=\s*currentAiModel/);
+  assert.match(systemSettingsJsContent, /verifyPayload\.aiApiKey\s*=\s*apiKey/);
+  assert.match(systemSettingsJsContent, /body:\s*JSON\.stringify\(verifyPayload\)/);
+});
