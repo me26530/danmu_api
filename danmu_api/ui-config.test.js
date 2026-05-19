@@ -4,6 +4,8 @@ import assert from 'node:assert';
 import { Globals } from './configs/globals.js';
 import { Envs } from './configs/envs.js';
 import { apitestJsContent } from './ui/js/apitest.js';
+import { systemSettingsJsContent } from './ui/js/systemsettings.js';
+import { convertToDanmakuJson } from './utils/danmu-util.js';
 
 test('DANMU_OFFSET UI config should expose quick timeline-offset editor metadata', () => {
   const config = Globals.init({});
@@ -62,7 +64,7 @@ test('CUSTOM_MERGE_RULES config should parse merge, route and block rules', () =
     CUSTOM_MERGE_RULES: '天气之子@bilibili -> 天气之子@dandan; 我推的孩子/S01@bahamut -> 我推的孩子/S03@dandan | E25~E35>E1~E11; A@iqiyi × B@tencent; bad@unknown -> B@tencent'
   });
 
-  assert.equal(config.envVarConfig.CUSTOM_MERGE_RULES.type, 'text');
+  assert.equal(config.envVarConfig.CUSTOM_MERGE_RULES.type, 'custom-merge-rules');
   assert.deepEqual(config.customMergeRules, [
     {
       action: 'merge',
@@ -86,6 +88,38 @@ test('CUSTOM_MERGE_RULES config should parse merge, route and block rules', () =
       hasRoutes: false
     }
   ]);
+});
+
+test('CUSTOM_MERGE_RULES system settings should expose a visual custom merge rules editor', () => {
+  assert.match(systemSettingsJsContent, /custom-merge-rules-panel/);
+  assert.match(systemSettingsJsContent, /function\s+renderCustomMergeRulesEditor/);
+  assert.match(systemSettingsJsContent, /function\s+addCustomMergeRuleItem/);
+  assert.match(systemSettingsJsContent, /function\s+collectCustomMergeRuleValue/);
+  assert.match(systemSettingsJsContent, /副源剧名/);
+  assert.match(systemSettingsJsContent, /主源剧名/);
+  assert.match(systemSettingsJsContent, /集数路由/);
+});
+
+test('upstream COLOR_POOL env should stay available as a rich color-list compatibility variable', () => {
+  const config = Globals.init({ COLOR_POOL: '16777215,16744319' });
+
+  assert.equal(config.envVarConfig.COLOR_POOL.type, 'color-list');
+  assert.equal(config.colorPool, '16777215,16744319');
+});
+
+test('CONVERT_COLOR=color should use upstream COLOR_POOL when provided', () => {
+  Globals.init({
+    CONVERT_COLOR: 'color',
+    COLOR_POOL: '16744319',
+    GROUP_MINUTE: '0',
+    BLOCKED_WORDS: '',
+  });
+
+  const [converted] = convertToDanmakuJson([
+    { timepoint: 1000, ct: 1, color: 16777215, content: 'hello' }
+  ], 'dandan');
+
+  assert.equal(converted.p.split(',')[2], '16744319');
 });
 
 test('API test UI should expose a debug toggle for matchAnime', () => {

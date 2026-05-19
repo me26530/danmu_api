@@ -599,11 +599,12 @@ function renderEnvList() {
                          item.type === 'select' ? 'select' :
                          item.type === 'multi-select' ? 'multi' :
                          item.type === 'map' ? 'map' :
+                         item.type === 'custom-merge-rules' ? 'merge' :
                          item.type === 'timeline-offset' ? 'offset' :
                          item.type === 'color-list' ? 'color' : 'text';
         const badgeClass = item.type === 'multi-select' ? 'multi' : 
                           item.type === 'color-list' ? 'color' :
-                          (item.type === 'map' || item.type === 'timeline-offset') ? 'map' : '';
+                          (item.type === 'map' || item.type === 'custom-merge-rules' || item.type === 'timeline-offset') ? 'map' : '';
 
         return \`
             <div class="env-item"\${getEntryAnimationStyle(index, 0.05)}>
@@ -941,6 +942,8 @@ document.getElementById('env-form').addEventListener('submit', async function(e)
         type = 'select';
     } else if (document.querySelector('.multi-select-container')) {
         type = 'multi-select';
+    } else if (document.getElementById('custom-merge-rules-container')) {
+        type = 'custom-merge-rules';
     }
 
     let value, itemData;
@@ -984,6 +987,9 @@ document.getElementById('env-form').addEventListener('submit', async function(e)
                 }
             });
             value = pairs.join(';');
+            itemData = { key, value, description, type };
+        } else if (type === 'custom-merge-rules') {
+            value = collectCustomMergeRuleValue();
             itemData = { key, value, description, type };
         } else if (type === 'timeline-offset') {
             const lineInputs = document.querySelectorAll('#timeline-offset-container .timeline-offset-line-input');
@@ -1290,6 +1296,9 @@ function renderValueInput(item) {
                 <span>添加映射项</span>
             </button>
         \`;
+
+    } else if (type === 'custom-merge-rules') {
+        renderCustomMergeRulesEditor(container, item, value);
 
     } else if (type === 'timeline-offset') {
         const sourceOptions = getTimelineOffsetSourceOptions(item && item.options ? item.options : []);
@@ -1664,6 +1673,227 @@ FFFFFF FF5733 00FF00"></textarea>
             \`;
         }
     }
+}
+
+/* ========================================
+   CUSTOM_MERGE_RULES 可视化编辑器
+   ======================================== */
+function getCustomMergeSourceOptions(item, selectedSources = []) {
+    const base = item && Array.isArray(item.options) ? item.options : [];
+    return Array.from(new Set(base.concat(selectedSources.filter(Boolean))));
+}
+
+function parseCustomMergeRuleEntity(raw) {
+    const text = String(raw || '').trim();
+    const atIndex = text.lastIndexOf('@');
+    if (atIndex <= 0 || atIndex === text.length - 1) {
+        return { title: text, season: '', source: '' };
+    }
+
+    const source = text.slice(atIndex + 1).trim();
+    let title = text.slice(0, atIndex).trim();
+    let season = '';
+    const upperTitle = title.toUpperCase();
+    const seasonIndex = upperTitle.lastIndexOf('/S');
+    if (seasonIndex > 0) {
+        const seasonText = title.slice(seasonIndex + 2).trim();
+        const seasonNumber = Number(seasonText);
+        if (Number.isInteger(seasonNumber) && seasonNumber > 0) {
+            season = String(seasonNumber);
+            title = title.slice(0, seasonIndex).trim();
+        }
+    }
+
+    return { title, season, source };
+}
+
+function parseCustomMergeRuleLine(line) {
+    const rawText = String(line || '').trim();
+    if (!rawText) return null;
+
+    const pipeIndex = rawText.indexOf('|');
+    const entityPart = pipeIndex === -1 ? rawText : rawText.slice(0, pipeIndex).trim();
+    const routes = pipeIndex === -1 ? '' : rawText.slice(pipeIndex + 1).trim();
+    let action = 'merge';
+    let separator = '->';
+    let separatorIndex = entityPart.indexOf('->');
+
+    if (separatorIndex === -1) {
+        separator = '×';
+        separatorIndex = entityPart.indexOf('×');
+        action = 'block';
+    }
+
+    if (separatorIndex === -1) {
+        return {
+            action: 'merge',
+            secondary: parseCustomMergeRuleEntity(entityPart),
+            primary: { title: '', season: '', source: '' },
+            routes: ''
+        };
+    }
+
+    return {
+        action,
+        secondary: parseCustomMergeRuleEntity(entityPart.slice(0, separatorIndex)),
+        primary: parseCustomMergeRuleEntity(entityPart.slice(separatorIndex + separator.length)),
+        routes
+    };
+}
+
+function parseCustomMergeRulesValue(value) {
+    const text = String(value || '').trim();
+    if (!text) return [];
+    return text
+        .split(';')
+        .flatMap(part => part.split(String.fromCharCode(10)))
+        .map(parseCustomMergeRuleLine)
+        .filter(Boolean);
+}
+
+function buildCustomMergeSourceSelect(className, sources, selected) {
+    const normalizedSelected = String(selected || '').trim();
+    const allSources = getCustomMergeSourceOptions({ options: sources }, [normalizedSelected]);
+    return '<select class="form-select ' + className + '">' +
+        '<option value="">选择来源</option>' +
+        allSources.map(source => {
+            const safeSource = escapeHtml(source);
+            return '<option value="' + safeSource + '" ' + (source === normalizedSelected ? 'selected' : '') + '>' + safeSource + '</option>';
+        }).join('') +
+        '</select>';
+}
+
+function buildCustomMergeRuleItemMarkup(rule, index, sources) {
+    const action = rule && rule.action === 'block' ? 'block' : 'merge';
+    const secondary = rule && rule.secondary ? rule.secondary : { title: '', season: '', source: '' };
+    const primary = rule && rule.primary ? rule.primary : { title: '', season: '', source: '' };
+    const routes = rule && rule.routes ? rule.routes : '';
+
+    return '<div class="custom-merge-rule-item" data-index="' + index + '">' +
+        '<div class="custom-merge-rule-head">' +
+            '<div class="custom-merge-rule-title">规则 #' + (index + 1) + '</div>' +
+            '<select class="form-select custom-merge-action" onchange="updateCustomMergeRuleAction(this)">' +
+                '<option value="merge" ' + (action === 'merge' ? 'selected' : '') + '>强制合并</option>' +
+                '<option value="block" ' + (action === 'block' ? 'selected' : '') + '>阻断合并</option>' +
+            '</select>' +
+            '<button type="button" class="btn btn-danger btn-sm" onclick="removeCustomMergeRuleItem(this)">删除</button>' +
+        '</div>' +
+        '<div class="custom-merge-rule-grid">' +
+            '<div class="custom-merge-side-card">' +
+                '<div class="custom-merge-side-title">副源剧名</div>' +
+                '<input type="text" class="form-input custom-merge-secondary-title" placeholder="例如：我推的孩子" value="' + escapeHtml(secondary.title || '') + '">' +
+                '<div class="custom-merge-inline-fields">' +
+                    '<input type="number" min="1" class="form-input custom-merge-secondary-season" placeholder="季，可空" value="' + escapeHtml(secondary.season || '') + '">' +
+                    buildCustomMergeSourceSelect('custom-merge-secondary-source', sources, secondary.source) +
+                '</div>' +
+            '</div>' +
+            '<div class="custom-merge-arrow" data-action="' + action + '">' + (action === 'block' ? '×' : '→') + '</div>' +
+            '<div class="custom-merge-side-card">' +
+                '<div class="custom-merge-side-title">主源剧名</div>' +
+                '<input type="text" class="form-input custom-merge-primary-title" placeholder="例如：我推的孩子" value="' + escapeHtml(primary.title || '') + '">' +
+                '<div class="custom-merge-inline-fields">' +
+                    '<input type="number" min="1" class="form-input custom-merge-primary-season" placeholder="季，可空" value="' + escapeHtml(primary.season || '') + '">' +
+                    buildCustomMergeSourceSelect('custom-merge-primary-source', sources, primary.source) +
+                '</div>' +
+            '</div>' +
+        '</div>' +
+        '<div class="custom-merge-route-row" style="display:' + (action === 'block' ? 'none' : 'block') + ';">' +
+            '<label class="form-label">集数路由（可选）</label>' +
+            '<input type="text" class="form-input custom-merge-routes" placeholder="E25~E35>E1~E11，可用逗号添加多段" value="' + escapeHtml(routes) + '">' +
+        '</div>' +
+    '</div>';
+}
+
+function renderCustomMergeRulesEditor(container, item, value) {
+    const sources = item && Array.isArray(item.options) ? item.options : [];
+    const rules = parseCustomMergeRulesValue(value);
+    container.innerHTML = '<div class="custom-merge-rules-panel">' +
+        '<div class="custom-merge-rules-header">' +
+            '<div>' +
+                '<div class="custom-merge-rules-title">自定义合并规则</div>' +
+                '<div class="custom-merge-rules-help">按副源 → 主源配置；阻断规则会保存为 “×”；集数路由示例：E25~E35>E1~E11。</div>' +
+            '</div>' +
+            '<button type="button" class="btn btn-primary btn-sm" onclick="addCustomMergeRuleItem()">新增规则</button>' +
+        '</div>' +
+        '<div class="custom-merge-rules-list" id="custom-merge-rules-container" data-sources="' + escapeHtml(JSON.stringify(sources)) + '">' +
+            (rules.length > 0 ? rules.map((rule, index) => buildCustomMergeRuleItemMarkup(rule, index, sources)).join('') : '<div class="custom-merge-rules-empty">暂无规则，点击右上角新增。</div>') +
+        '</div>' +
+    '</div>';
+}
+
+function getCustomMergeEditorSources() {
+    const container = document.getElementById('custom-merge-rules-container');
+    if (!container) return [];
+    try {
+        return JSON.parse(container.dataset.sources || '[]');
+    } catch (error) {
+        return [];
+    }
+}
+
+function addCustomMergeRuleItem() {
+    const container = document.getElementById('custom-merge-rules-container');
+    if (!container) return;
+    const empty = container.querySelector('.custom-merge-rules-empty');
+    if (empty) empty.remove();
+    const sources = getCustomMergeEditorSources();
+    const index = container.querySelectorAll('.custom-merge-rule-item').length;
+    container.insertAdjacentHTML('beforeend', buildCustomMergeRuleItemMarkup({ action: 'merge' }, index, sources));
+}
+
+function removeCustomMergeRuleItem(button) {
+    const item = button.closest('.custom-merge-rule-item');
+    const container = document.getElementById('custom-merge-rules-container');
+    if (item) item.remove();
+    if (container && container.querySelectorAll('.custom-merge-rule-item').length === 0) {
+        container.innerHTML = '<div class="custom-merge-rules-empty">暂无规则，点击右上角新增。</div>';
+    }
+}
+
+function updateCustomMergeRuleAction(select) {
+    const item = select.closest('.custom-merge-rule-item');
+    if (!item) return;
+    const arrow = item.querySelector('.custom-merge-arrow');
+    const routeRow = item.querySelector('.custom-merge-route-row');
+    const isBlock = select.value === 'block';
+    if (arrow) {
+        arrow.textContent = isBlock ? '×' : '→';
+        arrow.dataset.action = isBlock ? 'block' : 'merge';
+    }
+    if (routeRow) routeRow.style.display = isBlock ? 'none' : 'block';
+}
+
+function formatCustomMergeEntity(title, season, source) {
+    const cleanTitle = String(title || '').trim();
+    const cleanSource = String(source || '').trim();
+    if (!cleanTitle || !cleanSource) return '';
+    const seasonNumber = Number(String(season || '').trim());
+    const seasonPart = Number.isInteger(seasonNumber) && seasonNumber > 0 ? '/S' + String(seasonNumber).padStart(2, '0') : '';
+    return cleanTitle + seasonPart + '@' + cleanSource;
+}
+
+function collectCustomMergeRuleValue() {
+    const items = document.querySelectorAll('#custom-merge-rules-container .custom-merge-rule-item');
+    const rules = [];
+    items.forEach(item => {
+        const action = item.querySelector('.custom-merge-action')?.value === 'block' ? 'block' : 'merge';
+        const secondary = formatCustomMergeEntity(
+            item.querySelector('.custom-merge-secondary-title')?.value,
+            item.querySelector('.custom-merge-secondary-season')?.value,
+            item.querySelector('.custom-merge-secondary-source')?.value
+        );
+        const primary = formatCustomMergeEntity(
+            item.querySelector('.custom-merge-primary-title')?.value,
+            item.querySelector('.custom-merge-primary-season')?.value,
+            item.querySelector('.custom-merge-primary-source')?.value
+        );
+        if (!secondary || !primary) return;
+        const route = String(item.querySelector('.custom-merge-routes')?.value || '').trim();
+        let rule = secondary + (action === 'block' ? ' × ' : ' -> ') + primary;
+        if (action === 'merge' && route) rule += ' | ' + route;
+        rules.push(rule);
+    });
+    return rules.join('; ');
 }
 
 /* ========================================

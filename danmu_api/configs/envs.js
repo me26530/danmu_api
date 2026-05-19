@@ -703,7 +703,7 @@ export class Envs {
       'SOURCE_DETAIL_CONCURRENCY': { category: 'source', type: 'number', description: '源内详情/候选处理默认并发，默认4，范围 1-16；用于控制单个源在处理搜索候选详情时的同时并发数', min: 1, max: 16 },
       'SOURCE_DETAIL_CONCURRENCY_BY_SOURCE': { category: 'source', type: 'text', description: '按源覆盖源内详情/候选处理并发，格式：源名:并发,源名:并发；示例：tencent:2,vod:3,iqiyi:4，值会被限制在 1-16 范围内' },
       'MERGE_SOURCE_PAIRS': { category: 'source', type: 'multi-select', options: this.MERGE_ALLOWED_SOURCES, description: '源合并配置，配置后将对应源合并同时一起获取弹幕返回，允许多组，允许多源，允许填单源表示保留原结果，一组中第一个为主源其余为副源，副源往主源合并，主源如果没有结果会轮替下一个作为主源。\n格式：源1&源2&源3 ，多组用逗号分隔。\n示例：dandan&animeko&bahamut,bilibili&animeko,dandan' },
-      'CUSTOM_MERGE_RULES': { category: 'source', type: 'text', options: this.MERGE_ALLOWED_SOURCES, description: '合并映射表，用于自定义源合并行为。格式1(合并)：副源剧名/S季数@来源 -> 主源剧名/S季数@来源 | E副源集数>E主源集数；格式2(阻断)：副源剧名/S季数@来源 × 主源剧名/S季数@来源。[/S季数] 与 [|路由规则] 可选，多个规则用分号隔开，多段路由用逗号分隔。' },
+      'CUSTOM_MERGE_RULES': { category: 'source', type: 'custom-merge-rules', options: this.MERGE_ALLOWED_SOURCES, description: '可视化合并映射表，用于自定义源合并行为。支持强制合并、阻断合并和集数路由；保存格式兼容：副源剧名/S季数@来源 -> 主源剧名/S季数@来源 | E副源集数>E主源集数，多条规则用分号隔开。' },
       'REAL_TIME_PULL_DANDAN': { category: 'source', type: 'boolean', description: '已废弃兼容项：弹弹 related 接口已下线，当前版本保留该变量仅为兼容旧配置，不再生效' },
       // 匹配配置
       'PLATFORM_ORDER': { category: 'match', type: 'multi-select', options: this.ALLOWED_PLATFORMS, description: '平台排序配置，可以配置自动匹配时的优选平台。\n当配置合并平台的时候，可以指定期望的合并源，\n示例：一个结果返回了“dandan&bilibili1&animeko”和“youku”时，\n当配置“youku”时返回“youku” \n当配置“dandan&animeko”时返回“dandan&bilibili1&animeko”' },
@@ -729,7 +729,8 @@ export class Envs {
       'DANMU_LIKE_PRESET': { category: 'danmu', type: 'select', options: ['default', 'pink_under_1k', 'outline_under_1k', 'pink_only', 'outline_only', 'off'], description: '点赞显示预设：default（<100♡，100~999💗，>=1000🔥）、pink_under_1k（<1000💗，>=1000🔥）、outline_under_1k（<1000♡，>=1000🔥）、pink_only（统一💗）、outline_only（统一♡）、off（关闭点赞显示）' },
       'DANMU_SIMPLIFIED_TRADITIONAL': { category: 'danmu', type: 'select', options: ['default', 'simplified', 'traditional'], description: '弹幕简繁体转换设置：default（默认不转换）、simplified（繁转简）、traditional（简转繁）' },
       'CONVERT_TOP_BOTTOM_TO_SCROLL': { category: 'danmu', type: 'boolean', description: '顶部/底部弹幕转换为浮动弹幕' },
-      'CONVERT_COLOR': { category: 'danmu', type: 'color-list', description: '自定义随机转换颜色池（支持手动配置/排序/删除，支持真随机添加，为空则不转换）' },
+      'CONVERT_COLOR': { category: 'danmu', type: 'color-list', description: '自定义随机转换颜色池（支持手动配置/排序/删除，支持真随机添加，为空则不转换；兼容 default/white/color 旧值）' },
+      'COLOR_POOL': { category: 'danmu', type: 'color-list', description: '上游兼容颜色池：当 CONVERT_COLOR=color 时作为随机颜色池生效。也可继续直接在 CONVERT_COLOR 中配置颜色池。' },
       'DANMU_FONT_SIZE': { category: 'danmu', type: 'number', description: '弹幕字体大小（B站标准），默认25', min: 10, max: 100 },
       'DANMU_OUTPUT_FORMAT': { category: 'danmu', type: 'select', options: ['json', 'xml'], description: '弹幕输出格式，默认json' },
       'DANMU_PUSH_URL': { category: 'danmu', type: 'text', description: '弹幕推送地址，示例 http://127.0.0.1:9978/action?do=refresh&type=danmaku&path= ' },
@@ -826,6 +827,7 @@ export class Envs {
       commentCacheMaxItems: this.get('COMMENT_CACHE_MAX_ITEMS', 300, 'number'), // 弹幕缓存最大条目数（默认 300，0表示不限制）
       convertTopBottomToScroll: this.get('CONVERT_TOP_BOTTOM_TO_SCROLL', false, 'boolean'), // 顶部/底部弹幕转换为浮动弹幕配置（默认 false，禁用转换）
       convertColor: this.get('CONVERT_COLOR', 'default', 'string'), // 弹幕转换颜色配置，支持 default、white、color 或自定义十进制颜色列表
+      colorPool: this.get('COLOR_POOL', '16777215,16777215,16777215,16777215,16777215,16777215,16777215,16777215,16744319,16752762,16774799,9498256,8388564,8900346,14204888,16758465', 'string'), // 上游兼容颜色池，CONVERT_COLOR=color 时生效
       danmuOutputFormat: this.get('DANMU_OUTPUT_FORMAT', 'json', 'string'), // 弹幕输出格式配置（默认 json，可选值：json, xml）
       strictTitleMatch: this.get('STRICT_TITLE_MATCH', false, 'boolean'), // 严格标题匹配模式配置（默认 false，宽松模糊匹配）
       titleToChinese: this.get('TITLE_TO_CHINESE', false, 'boolean'), // 外语标题转换中文开关

@@ -158,7 +158,14 @@ function resolveDanmuLikeIcon(item, preset, { lowThreshold = false } = {}) {
   return '♡';
 }
 
-function resolveConvertColorConfig(rawConvertColor) {
+function parseColorPool(rawPool) {
+  return String(rawPool || '')
+    .split(',')
+    .map(item => Number.parseInt(item.trim(), 10))
+    .filter(color => Number.isInteger(color) && color >= 0 && color <= 16777215);
+}
+
+function resolveConvertColorConfig(rawConvertColor, rawColorPool = '') {
   const value = String(rawConvertColor || '').trim();
 
   if (!value || value === 'default') {
@@ -170,13 +177,11 @@ function resolveConvertColorConfig(rawConvertColor) {
   }
 
   if (value === 'color') {
-    return { mode: 'random', pool: DEFAULT_RANDOM_COLOR_POOL };
+    const customPool = parseColorPool(rawColorPool);
+    return { mode: 'random', pool: customPool.length > 0 ? customPool : DEFAULT_RANDOM_COLOR_POOL };
   }
 
-  const pool = value
-    .split(',')
-    .map(item => Number.parseInt(item.trim(), 10))
-    .filter(color => Number.isInteger(color) && color >= 0 && color <= 16777215);
+  const pool = parseColorPool(value);
 
   if (pool.length === 0) {
     return null;
@@ -406,7 +411,7 @@ export function convertToDanmakuJson(contents, platform, offsetSeconds = 0) {
 
   // 应用弹幕转换规则（在去重和限制弹幕数之后）
   let convertedDanmus = limitDanmusByCount(likeDanmus, globals.danmuLimit);
-  const convertColorConfig = resolveConvertColorConfig(globals.convertColor);
+  const convertColorConfig = resolveConvertColorConfig(globals.convertColor, globals.colorPool);
   if (globals.convertTopBottomToScroll || convertColorConfig) {
     let topBottomCount = 0;
     let colorCount = 0;

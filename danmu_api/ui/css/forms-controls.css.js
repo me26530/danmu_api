@@ -843,6 +843,141 @@ export const formsControlsCssContent = /* css */ `/* ===========================
 }
 
 /* ========================================
+   自定义合并规则编辑器
+   ======================================== */
+.custom-merge-rules-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.custom-merge-rules-header,
+.custom-merge-rule-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.custom-merge-rules-title {
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 0.25rem;
+}
+
+.custom-merge-rules-help {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    line-height: 1.5;
+}
+
+.custom-merge-rules-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.custom-merge-rule-item,
+.custom-merge-rules-empty {
+    border: 1px solid rgba(var(--primary-rgb), 0.18);
+    border-radius: var(--radius-lg);
+    background: var(--bg-secondary);
+    padding: 1rem;
+}
+
+.custom-merge-rule-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.9rem;
+}
+
+.custom-merge-rule-title,
+.custom-merge-side-title {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.custom-merge-action {
+    max-width: 150px;
+}
+
+.custom-merge-rule-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    gap: 0.75rem;
+    align-items: stretch;
+}
+
+.custom-merge-side-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    padding: 0.85rem;
+    border-radius: var(--radius-md);
+    background: rgba(var(--primary-rgb), 0.06);
+    border: 1px solid rgba(var(--primary-rgb), 0.12);
+}
+
+.custom-merge-inline-fields {
+    display: grid;
+    grid-template-columns: minmax(88px, 0.35fr) minmax(140px, 1fr);
+    gap: 0.55rem;
+}
+
+.custom-merge-arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2.6rem;
+    border-radius: var(--radius-md);
+    color: var(--primary-color);
+    background: rgba(var(--primary-rgb), 0.12);
+    font-size: 1.45rem;
+    font-weight: 800;
+}
+
+.custom-merge-arrow[data-action="block"] {
+    color: var(--danger-color);
+    background: rgba(239, 68, 68, 0.12);
+}
+
+.custom-merge-route-row {
+    padding-top: 0.25rem;
+}
+
+.custom-merge-rules-empty {
+    color: var(--text-secondary);
+    text-align: center;
+    border-style: dashed;
+}
+
+[data-theme="dark"] .custom-merge-rule-item,
+[data-theme="dark"] .custom-merge-rules-empty {
+    background: rgba(17, 24, 39, 0.6);
+    border-color: rgba(99, 102, 241, 0.2);
+}
+
+[data-theme="dark"] .custom-merge-side-card {
+    background: rgba(99, 102, 241, 0.08);
+    border-color: rgba(129, 140, 248, 0.16);
+}
+
+@media (max-width: 768px) {
+    .custom-merge-rule-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .custom-merge-arrow {
+        min-height: 2.4rem;
+    }
+
+    .custom-merge-inline-fields {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ========================================
    紧凑型模态框底部
    ======================================== */
 .modal-footer-compact {
