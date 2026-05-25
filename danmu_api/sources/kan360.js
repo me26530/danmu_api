@@ -259,12 +259,12 @@ export default class Kan360Source extends BaseSource {
                   // 1. 常规节点为包含 url 属性的对象结构
                   if (item && typeof item === "object") {
                     epUrl = item.url || "";
-                  } 
+                  }
                   // 2. 特殊节点为字符串形态的关联链接
                   // 忽略该关联链接，并从顶层 playlinks 提取当前站点的主链接进行数据映射
                   else if (typeof item === "string") {
-                    epUrl = (anime.playlinks && anime.playlinks[anime.seriesSite]) 
-                              ? anime.playlinks[anime.seriesSite] 
+                    epUrl = (anime.playlinks && anime.playlinks[anime.seriesSite])
+                              ? anime.playlinks[anime.seriesSite]
                               : "";
                   }
 
