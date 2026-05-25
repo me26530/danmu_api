@@ -140,7 +140,9 @@ function setupEnvWatcher() {
         console.log('[server] dotenv keys:', Array.from(dotenvKeys).join(', '));
 
         if (process.env.USE_BANGUMI_DATA === 'false') {
-          clearBangumiDataCache();
+          clearBangumiDataCache(true).catch(err => {
+            console.log('[server] Failed to clear Bangumi Data cache:', err?.message || err);
+          });
         }
       } catch (err) {
         console.log('[server] Error reloading .env:', err?.message || err);

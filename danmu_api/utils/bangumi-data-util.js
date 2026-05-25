@@ -693,10 +693,11 @@ export async function searchBangumiData(keyword, siteKeys) {
 }
 
 /**
- * 释放本地数据内存缓存
- * 当动态关闭本地数据开关时调用，协助 V8 引擎进行垃圾回收
+ * 释放本地数据内存缓存与磁盘缓存
+ * 当动态关闭本地数据开关或主动清理缓存时调用，协助 V8 引擎进行垃圾回收并释放物理磁盘空间
+ * @param {boolean} clearDisk 是否同步清理物理磁盘文件
  */
-export function clearBangumiDataCache() {
+export async function clearBangumiDataCache(clearDisk = false) {
     if (memoryCache !== null) {
         const itemCount = memoryCache.items ? memoryCache.items.length : 0;
         memoryCache = null; // 切断引用，等待 GC 回收
@@ -707,5 +708,35 @@ export function clearBangumiDataCache() {
         log("info", `[Bangumi-Data] 内存缓存已主动释放 (原条目数: ${itemCount}，释放: ${memoryFootprintMB} MB${totalMemMB ? `，当前项目总占用: ${totalMemMB} MB` : ''})`);
         memoryFootprintMB = '0.00'; // 重置探针
         hasLoggedCacheWarning = false; // 重置警告标记
+    }
+
+    // 同步清理物理磁盘缓存文件及其并发临时文件。
+    // 这里必须继续走动态 node runtime，避免恢复 top-level fs/path 导入导致中立 bundle 失效。
+    if (clearDisk) {
+        try {
+            const nodeRuntime = await getNodeRuntime();
+            if (!nodeRuntime) return;
+
+            const cacheDir = nodeRuntime.path.join(process.cwd(), CACHE_DIRNAME);
+            const cachePath = nodeRuntime.path.join(cacheDir, CACHE_FILENAME);
+            const paths = [cachePath];
+            for (let i = 0; i < 5; i++) {
+                paths.push(`${cachePath}.tmp${i}`);
+            }
+
+            let removed = 0;
+            for (const targetPath of paths) {
+                if (nodeRuntime.fs.existsSync(targetPath)) {
+                    nodeRuntime.fs.unlinkSync(targetPath);
+                    removed++;
+                }
+            }
+
+            if (removed > 0) {
+                log("info", `[Bangumi-Data] 磁盘缓存已同步清理 (files=${removed})`);
+            }
+        } catch (e) {
+            log("error", `[Bangumi-Data] 磁盘缓存清理失败: ${e.message}`);
+        }
     }
 }

@@ -183,6 +183,24 @@ function normalizeFongmiEpisodeByRegex(episode) {
   return collapseSearchWhitespace(text);
 }
 
+function resolveFongmiMappedTitle(name) {
+  const rawName = collapseSearchWhitespace(name);
+  if (!rawName) return rawName;
+
+  if (globals.titleMappingTable && globals.titleMappingTable.size > 0) {
+    const mappedTitle = globals.titleMappingTable.get(rawName);
+    if (mappedTitle) {
+      const normalizedMappedTitle = collapseSearchWhitespace(mappedTitle);
+      if (normalizedMappedTitle) {
+        log('info', `[Fongmi] Title mapped from original: ${rawName} to: ${normalizedMappedTitle}`);
+        return normalizedMappedTitle;
+      }
+    }
+  }
+
+  return rawName;
+}
+
 function buildFongmiSearchKeywords(name) {
   const rawName = collapseSearchWhitespace(name);
   if (!rawName) return [];
@@ -582,7 +600,7 @@ export async function handleFongmiDanmaku(url, req, clientIp, authContext = {}) 
     }
 
     const { name, episode } = await parseFongmiParams(url, req);
-    const animeName = String(name || '').trim();
+    const animeName = resolveFongmiMappedTitle(name);
     const episodeName = String(episode || '').trim();
 
     if (!animeName) {

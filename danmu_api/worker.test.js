@@ -911,6 +911,51 @@ test('Fongmi nested danmaku path should collapse to alias handler', async () => 
   }
 });
 
+test('Fongmi title mapping should resolve raw title to mapped search keyword', async () => {
+  resetFongmiState();
+
+  try {
+    const anime = {
+      animeId: 910011,
+      bangumiId: '910011',
+      animeTitle: '映射标题',
+      type: 'tvseries',
+      typeDescription: 'TV',
+      imageUrl: '',
+      startDate: '2024-01-01T00:00:00.000Z',
+      episodeCount: 1,
+      rating: 0,
+      isFavorited: true,
+      source: 'tencent',
+      links: [
+        { id: 51001, url: 'https://v.qq.com/x/cover/fongmi-mapped/ep1.html', title: '【qq】 第1集' }
+      ]
+    };
+    cacheFongmiAnime(anime);
+
+    const req = new MockRequest(urlPrefix + '/token123/danmaku?name=' + encodeURIComponent('原始标题') + '&episode=1', {
+      method: 'GET'
+    });
+    const res = await handleRequest(req, {
+      TOKEN: 'token123',
+      RATE_LIMIT_MAX_REQUESTS: '0',
+      USE_BANGUMI_DATA: 'false',
+      TITLE_MAPPING_TABLE: '原始标题->映射标题'
+    }, 'test', '127.0.0.1');
+    const body = await parseResponse(res);
+
+    assert.equal(res.status, 200);
+    assert.deepEqual(body, [
+      {
+        name: '映射标题 【qq】 第1集',
+        url: `${urlPrefix}/token123/api/v2/comment/51001.xml`
+      }
+    ]);
+  } finally {
+    resetFongmiState();
+  }
+});
+
 test('Fongmi title cleanup should retry noisy media names without losing exact special titles', async () => {
   resetFongmiState();
 
