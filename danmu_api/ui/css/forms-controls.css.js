@@ -1434,17 +1434,35 @@ export const formsControlsCssContent = /* css */ `/* ===========================
 
 .map-container {
     margin-top: 0.85rem;
+    display: grid;
+    gap: 0.55rem;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 0.15rem;
 }
 
 .map-item-grid {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto;
+    grid-template-columns: minmax(15rem, 1fr) 2.2rem minmax(15rem, 1fr) auto;
     align-items: center;
+    gap: 0.55rem;
+    min-width: max-content;
+}
+
+.map-item-grid .form-input {
+    min-width: 0;
 }
 
 .map-separator {
     width: 2.2rem;
     text-align: center;
+    color: var(--text-secondary);
+    font-weight: 700;
+}
+
+.map-remove-btn {
+    white-space: nowrap;
 }
 
 .custom-merge-rule-actions {
@@ -1597,12 +1615,16 @@ export const formsControlsCssContent = /* css */ `/* ===========================
     }
 
     .map-item-grid {
-        align-items: stretch;
+        align-items: center;
+        grid-template-columns: minmax(14rem, 1fr) 2rem minmax(14rem, 1fr) auto;
+        gap: 0.45rem;
+        overflow-x: visible;
+        padding-bottom: 0;
     }
 
     .map-separator {
-        width: 100%;
-        transform: rotate(90deg);
+        width: 2rem;
+        transform: none;
     }
 
     .custom-merge-rule-grid {

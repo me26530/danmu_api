@@ -148,14 +148,15 @@ test('system settings env modal responsive CSS should prevent squeezed custom co
   assert.match(formsControlsCssContent, /\.env-modal-side\s*\{[\s\S]*overflow:\s*visible/);
   assert.match(formsControlsCssContent, /\.env-modal-value-card\s*\{[\s\S]*min-width:\s*0/);
   assert.match(formsControlsCssContent, /\.multi-select-toolbar\s*\{[\s\S]*flex-wrap:\s*wrap/);
-  assert.match(formsControlsCssContent, /\.map-item-grid\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+auto\s+minmax\(0,\s*1fr\)\s+auto/);
+  assert.match(formsControlsCssContent, /\.map-container\s*\{[\s\S]*overflow-x:\s*auto/);
+  assert.match(formsControlsCssContent, /\.map-item-grid\s*\{[\s\S]*grid-template-columns:\s*minmax\(15rem,\s*1fr\)\s+2\.2rem\s+minmax\(15rem,\s*1fr\)\s+auto[\s\S]*min-width:\s*max-content/);
   assert.match(formsControlsCssContent, /@media\s*\(max-width:\s*900px\)\s*\{[\s\S]*\.env-modal-shell\s*\{[\s\S]*display:\s*flex;[\s\S]*flex-direction:\s*column/);
   assert.match(formsControlsCssContent, /@media\s*\(max-width:\s*900px\)\s*\{[\s\S]*\.env-modal-side\s*\{[\s\S]*align-self:\s*stretch;[\s\S]*width:\s*100%;[\s\S]*max-height:\s*none;[\s\S]*overflow:\s*visible/);
   assert.match(formsControlsCssContent, /\.env-modal-meta-list\s*\{[\s\S]*display:\s*grid;[\s\S]*grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(min\(100%,\s*13rem\),\s*1fr\)\)/);
   assert.match(formsControlsCssContent, /\.env-modal-meta-field\s*\{[\s\S]*display:\s*flex;[\s\S]*flex-direction:\s*column;[\s\S]*min-width:\s*0/);
   assert.match(formsControlsCssContent, /\.env-modal-meta-field\s+\.form-input,[\s\S]*\.env-modal-meta-field\s+\.form-select\s*\{[\s\S]*width:\s*100%/);
   assert.match(formsControlsCssContent, /@media\s*\(max-width:\s*900px\)\s*\{[\s\S]*\.env-modal-meta-list\s*\{[\s\S]*grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(min\(100%,\s*12rem\),\s*1fr\)\)/);
-  assert.match(formsControlsCssContent, /@media\s*\(max-width:\s*720px\)\s*\{[\s\S]*\.map-item-grid\s*\{[\s\S]*grid-template-columns:\s*1fr/);
+  assert.match(formsControlsCssContent, /@media\s*\(max-width:\s*720px\)\s*\{[\s\S]*\.map-item-grid\s*\{[\s\S]*grid-template-columns:\s*minmax\(14rem,\s*1fr\)\s+2rem\s+minmax\(14rem,\s*1fr\)\s+auto[\s\S]*overflow-x:\s*visible/);
   assert.match(formsControlsCssContent, /@media\s*\(max-width:\s*720px\)\s*\{[\s\S]*\.custom-merge-rule-grid\s*\{[\s\S]*grid-template-columns:\s*1fr/);
   assert.match(formsControlsCssContent, /@media\s*\(max-width:\s*720px\)\s*\{[\s\S]*\.timeline-offset-actions,\s*\n\s*\.custom-merge-rules-actions\s*\{[\s\S]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
   assert.match(formsControlsCssContent, /@media\s*\(max-width:\s*720px\)\s*\{[\s\S]*\.anime-cache-card-body\s*\{[\s\S]*display:\s*grid;[\s\S]*grid-template-columns:\s*34px\s+minmax\(0,\s*1fr\)\s+auto/);
@@ -206,6 +207,23 @@ test('system settings env modal should keep mobile controls full-width in a real
           </div>
         </div>
         <div class="custom-merge-rules-list"><div class="custom-merge-rules-empty">暂无规则</div></div>
+      </div>
+    `;
+
+    const mapEditorMarkup = `
+      <div class="map-editor-panel">
+        <div class="map-editor-head">
+          <div><div class="map-editor-title">映射配置</div></div>
+          <button type="button" class="btn btn-primary btn-sm">添加映射项</button>
+        </div>
+        <div class="map-container">
+          <div class="map-item map-item-grid">
+            <input type="text" class="map-input-left form-input" value="CUSTOM_SOURCE_API_URL 很长的原始标题不要被挤压">
+            <span class="map-separator">→</span>
+            <input type="text" class="map-input-right form-input" value="映射后的长标题也保持一排">
+            <button type="button" class="btn btn-danger btn-sm map-remove-btn">删除</button>
+          </div>
+        </div>
       </div>
     `;
 
@@ -291,6 +309,42 @@ test('system settings env modal should keep mobile controls full-width in a real
     await renderModal(customMergeMarkup, 'custom-merge-rules');
     const customMerge = await readLayout('.custom-merge-rules-actions');
     assert.ok(customMerge.action.width >= customMerge.valueCard.width * 0.85, `custom merge actions should be full-width, got ${customMerge.action.width} / ${customMerge.valueCard.width}`);
+
+    await renderModal(mapEditorMarkup, 'map');
+    const mapLayout = await page.evaluate(() => {
+      const get = (selector) => {
+        const el = document.querySelector(selector);
+        const rect = el.getBoundingClientRect();
+        const style = window.getComputedStyle(el);
+        return {
+          width: rect.width,
+          height: rect.height,
+          clientWidth: el.clientWidth,
+          scrollWidth: el.scrollWidth,
+          display: style.display,
+          gridTemplateColumns: style.gridTemplateColumns,
+          overflowX: style.overflowX,
+          transform: style.transform,
+          whiteSpace: style.whiteSpace
+        };
+      };
+      return {
+        container: get('.map-container'),
+        row: get('.map-item-grid'),
+        left: get('.map-input-left'),
+        right: get('.map-input-right'),
+        separator: get('.map-separator'),
+        remove: get('.map-remove-btn')
+      };
+    });
+    assert.equal(mapLayout.row.display, 'grid');
+    assert.match(mapLayout.row.gridTemplateColumns, /\d+(?:\.\d+)?px 28px \d+(?:\.\d+)?px/);
+    assert.equal(mapLayout.container.overflowX, 'auto');
+    assert.ok(mapLayout.container.scrollWidth > mapLayout.container.clientWidth, `map container should scroll horizontally instead of squeezing, got scroll ${mapLayout.container.scrollWidth} / client ${mapLayout.container.clientWidth}`);
+    assert.ok(mapLayout.left.width >= 180, `left map input should keep usable width, got ${mapLayout.left.width}`);
+    assert.ok(mapLayout.right.width >= 180, `right map input should keep usable width, got ${mapLayout.right.width}`);
+    assert.equal(mapLayout.separator.transform, 'none');
+    assert.equal(mapLayout.remove.whiteSpace, 'nowrap');
 
     await renderModal(recentDataMarkup, 'custom-merge-rules');
     const recent = await page.evaluate(() => {
