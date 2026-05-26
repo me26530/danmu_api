@@ -1224,55 +1224,70 @@ function renderValueInput(item) {
         stagingTags = [];
 
         const optionsInput = item ? '' : \`
-            <div class="form-group margin-bottom-15">
-                <label>可选项 (逗号分隔)</label>
-                <input type="text" id="multi-options" placeholder="例如: auth,payment,analytics"
+            <div class="form-group margin-bottom-15 multi-select-options-editor">
+                <label class="form-label">可选项（逗号分隔）</label>
+                <input type="text" class="form-input" id="multi-options" placeholder="例如: auth,payment,analytics"
                        value="\${options.join(',')}" onchange="updateMultiOptions()">
             </div>
         \`;
 
         container.innerHTML = \`
             \${optionsInput}
-            <label>已选择 (拖动调整顺序)</label>
             <div class="multi-select-container">
-                <div class="selected-tags \${selectedValues.length === 0 ? 'empty' : ''}" id="selected-tags">
-                    \${selectedValues.map(val => \`
-                        <div class="selected-tag" draggable="true" data-value="\${val}">
-                            <span class="tag-text">\${val}</span>
-                            <button type="button" class="remove-btn" onclick="removeSelectedTag(this)">×</button>
-                        </div>
-                    \`).join('')}
-                </div>
-
-                \${shouldShowMergeMode ? \`
-                <div class="merge-mode-controls">
+                <div class="multi-select-toolbar">
+                    <div>
+                        <div class="multi-select-title">已选择</div>
+                        <div class="multi-select-hint">拖动调整顺序；合并源对会按当前顺序保存。</div>
+                    </div>
+                    \${shouldShowMergeMode ? \`
                     <button type="button" class="btn btn-sm btn-secondary merge-mode-btn" id="merge-mode-toggle" onclick="toggleMergeMode()">
-                        <span class="icon">🔗</span> <span>开启合并模式</span>
+                        <span class="icon">🔗</span> <span>合并模式</span>
                     </button>
-                    <div class="form-help" style="margin: 0; font-size: 0.8em; margin-left: 10px;">
-                        开启后，点击下方选项添加到暂存区，组合后点击 √ 确认添加
+                    \` : ''}
+                </div>
+                <div class="selected-tags-panel">
+                    <div class="selected-tags \${selectedValues.length === 0 ? 'empty' : ''}" id="selected-tags">
+                        \${selectedValues.map(val => \`
+                            <div class="selected-tag" draggable="true" data-value="\${val}">
+                                <span class="tag-text">\${val}</span>
+                                <button type="button" class="remove-btn" onclick="removeSelectedTag(this)" aria-label="移除 \${val}">×</button>
+                            </div>
+                        \`).join('')}
                     </div>
                 </div>
 
-                <div class="staging-area" id="staging-area">
-                    <button type="button" class="btn btn-sm btn-success confirm-merge-btn" onclick="confirmMergeGroup()" title="确认添加该组">
-                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="3">
-                            <polyline points="20 6 9 17 4 12"></polyline>
-                        </svg>
-                    </button>
+                \${shouldShowMergeMode ? \`
+                <div class="staging-card">
+                    <div class="staging-copy">
+                        <strong>组合暂存区</strong>
+                        <span>点击下方来源加入暂存区，再确认成组。</span>
+                    </div>
+                    <div class="staging-area" id="staging-area">
+                        <button type="button" class="btn btn-sm btn-success confirm-merge-btn" onclick="confirmMergeGroup()" title="确认添加该组">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="3">
+                                <polyline points="20 6 9 17 4 12"></polyline>
+                            </svg>
+                            <span>确认组合</span>
+                        </button>
+                    </div>
                 </div>
                 \` : ''}
 
-                <label>可选项 (点击添加)</label>
-                <div class="available-tags" id="available-tags">
-                    \${options.map(opt => {
-                        return \`
-                            <div class="available-tag"
-                                 data-value="\${opt}" onclick="addSelectedTag(this)">
-                                \${opt}
-                            </div>
-                        \`;
-                    }).join('')}
+                <div class="available-tags-panel">
+                    <div class="available-tags-head">
+                        <span class="multi-select-title">可选项</span>
+                        <span class="multi-select-hint">点击添加</span>
+                    </div>
+                    <div class="available-tags" id="available-tags">
+                        \${options.map(opt => {
+                            return \`
+                                <div class="available-tag"
+                                     data-value="\${opt}" onclick="addSelectedTag(this)">
+                                    \${opt}
+                                </div>
+                            \`;
+                        }).join('')}
+                    </div>
                 </div>
             </div>
             \${currentKey === 'MERGE_SOURCE_PAIRS' ? renderRecentDataControls('查看最近 animes 缓存，辅助判断哪些来源可以组成合并源对。') : ''}
@@ -1294,30 +1309,37 @@ function renderValueInput(item) {
         });
 
         container.innerHTML = \`
-            <label class="form-label">映射配置</label>
-            <div class="map-container" id="map-container">
-                \${mapItems.map((item, index) => \`
-                    <div class="map-item" data-index="\${index}">
-                        <input type="text" class="map-input-left form-input" placeholder="原始值" value="\${escapeHtml(item.left)}">
-                        <span class="map-separator">-></span>
-                        <input type="text" class="map-input-right form-input" placeholder="映射值" value="\${escapeHtml(item.right)}">
+            <div class="map-editor-panel">
+                <div class="map-editor-head">
+                    <div>
+                        <div class="map-editor-title">映射配置</div>
+                        <div class="map-editor-hint">左侧填写原始值，右侧填写替换/映射值；每一行独立保存。</div>
+                    </div>
+                    <button type="button" class="btn btn-primary btn-sm" onclick="addMapItem()">
+                        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <line x1="12" y1="5" x2="12" y2="19" stroke-width="2"/>
+                            <line x1="5" y1="12" x2="19" y2="12" stroke-width="2"/>
+                        </svg>
+                        <span>添加映射项</span>
+                    </button>
+                </div>
+                <div class="map-container" id="map-container">
+                    \${mapItems.map((item, index) => \`
+                        <div class="map-item map-item-grid" data-index="\${index}">
+                            <input type="text" class="map-input-left form-input" placeholder="原始值" value="\${escapeHtml(item.left)}">
+                            <span class="map-separator">→</span>
+                            <input type="text" class="map-input-right form-input" placeholder="映射值" value="\${escapeHtml(item.right)}">
+                            <button type="button" class="btn btn-danger btn-sm map-remove-btn" onclick="removeMapItem(this)">删除</button>
+                        </div>
+                    \`).join('')}
+                    <div class="map-item map-item-grid map-item-template" style="display: none;">
+                        <input type="text" class="map-input-left form-input" placeholder="原始值">
+                        <span class="map-separator">→</span>
+                        <input type="text" class="map-input-right form-input" placeholder="映射值">
                         <button type="button" class="btn btn-danger btn-sm map-remove-btn" onclick="removeMapItem(this)">删除</button>
                     </div>
-                \`).join('')}
-                <div class="map-item-template" style="display: none;">
-                    <input type="text" class="map-input-left form-input" placeholder="原始值">
-                    <span class="map-separator">-></span>
-                    <input type="text" class="map-input-right form-input" placeholder="映射值">
-                    <button type="button" class="btn btn-danger btn-sm map-remove-btn" onclick="removeMapItem(this)">删除</button>
                 </div>
             </div>
-            <button type="button" class="btn btn-primary" onclick="addMapItem()" style="margin-top: 1rem;">
-                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                    <line x1="12" y1="5" x2="12" y2="19" stroke-width="2"/>
-                    <line x1="5" y1="12" x2="19" y2="12" stroke-width="2"/>
-                </svg>
-                <span>添加映射项</span>
-            </button>
         \`;
 
     } else if (type === 'custom-merge-rules') {
@@ -1815,11 +1837,13 @@ function buildCustomMergeRuleItemMarkup(rule, index, sources) {
     return '<div class="custom-merge-rule-item" data-index="' + index + '">' +
         '<div class="custom-merge-rule-head">' +
             '<div class="custom-merge-rule-title">规则 #' + (index + 1) + '</div>' +
-            '<select class="form-select custom-merge-action" onchange="updateCustomMergeRuleAction(this)">' +
-                '<option value="merge" ' + (action === 'merge' ? 'selected' : '') + '>强制合并</option>' +
-                '<option value="block" ' + (action === 'block' ? 'selected' : '') + '>阻断合并</option>' +
-            '</select>' +
-            '<button type="button" class="btn btn-danger btn-sm" onclick="removeCustomMergeRuleItem(this)">删除</button>' +
+            '<div class="custom-merge-rule-actions">' +
+                '<select class="form-select custom-merge-action" onchange="updateCustomMergeRuleAction(this)">' +
+                    '<option value="merge" ' + (action === 'merge' ? 'selected' : '') + '>强制合并</option>' +
+                    '<option value="block" ' + (action === 'block' ? 'selected' : '') + '>阻断合并</option>' +
+                '</select>' +
+                '<button type="button" class="btn btn-danger btn-sm" onclick="removeCustomMergeRuleItem(this)">删除</button>' +
+            '</div>' +
         '</div>' +
         '<div class="custom-merge-rule-grid">' +
             '<div class="custom-merge-side-card">' +
@@ -2731,7 +2755,7 @@ function addMapItem() {
     const container = document.getElementById('map-container');
     const template = document.querySelector('.map-item-template');
     const newItem = template.cloneNode(true);
-    newItem.style.display = 'flex';
+    newItem.style.display = 'grid';
     newItem.classList.remove('map-item-template');
     newItem.classList.add('map-item');
     const index = container.querySelectorAll('.map-item:not(.map-item-template)').length;

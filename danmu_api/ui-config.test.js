@@ -1,10 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert';
+import { chromium } from 'playwright';
 
 import { Globals } from './configs/globals.js';
 import { Envs } from './configs/envs.js';
 import { apitestJsContent } from './ui/js/apitest.js';
 import { systemSettingsJsContent } from './ui/js/systemsettings.js';
+import { formsControlsCssContent } from './ui/css/forms-controls.css.js';
+import { responsiveCssContent } from './ui/css/responsive.css.js';
 import { HTML_TEMPLATE } from './ui/template.js';
 import { convertToDanmakuJson } from './utils/danmu-util.js';
 
@@ -104,6 +107,215 @@ test('CUSTOM_MERGE_RULES system settings should expose a visual custom merge rul
 
 test('system settings embedded script content should be valid JavaScript', () => {
   assert.doesNotThrow(() => new Function(systemSettingsJsContent));
+});
+
+test('system settings env modal should use a structured controls-first layout', () => {
+  assert.match(HTML_TEMPLATE, /env-modal-container/);
+  assert.match(HTML_TEMPLATE, /env-modal-header/);
+  assert.match(HTML_TEMPLATE, /env-modal-form/);
+  assert.match(HTML_TEMPLATE, /env-modal-body/);
+  assert.match(HTML_TEMPLATE, /env-modal-shell/);
+  assert.match(HTML_TEMPLATE, /env-modal-side/);
+  assert.match(HTML_TEMPLATE, /env-modal-workspace/);
+  assert.match(HTML_TEMPLATE, /env-modal-value-card/);
+  assert.match(HTML_TEMPLATE, /env-modal-description-card/);
+  assert.match(HTML_TEMPLATE, /env-modal-footer/);
+  assert.doesNotMatch(HTML_TEMPLATE, /编辑值/);
+  assert.doesNotMatch(HTML_TEMPLATE, /复杂配置会自动切换为专用编辑器/);
+
+  const valueIndex = HTML_TEMPLATE.indexOf('env-modal-value-card');
+  const descriptionIndex = HTML_TEMPLATE.indexOf('env-modal-description-card');
+  assert.ok(valueIndex >= 0 && descriptionIndex > valueIndex, 'description should be rendered after value editor');
+});
+
+test('system settings custom editors should expose modal-safe structure classes', () => {
+  assert.match(systemSettingsJsContent, /multi-select-toolbar/);
+  assert.match(systemSettingsJsContent, /selected-tags-panel/);
+  assert.match(systemSettingsJsContent, /available-tags-panel/);
+  assert.match(systemSettingsJsContent, /map-editor-panel/);
+  assert.match(systemSettingsJsContent, /map-item-grid/);
+  assert.match(systemSettingsJsContent, /timeline-offset-panel/);
+  assert.match(systemSettingsJsContent, /timeline-offset-line-main/);
+  assert.match(systemSettingsJsContent, /custom-merge-rules-list/);
+  assert.match(systemSettingsJsContent, /custom-merge-rule-grid/);
+  assert.match(systemSettingsJsContent, /recent-data-panel/);
+});
+
+test('system settings env modal responsive CSS should prevent squeezed custom controls', () => {
+  assert.match(formsControlsCssContent, /\.env-modal-container/);
+  assert.match(formsControlsCssContent, /\.env-modal-shell\s*\{[\s\S]*grid-template-columns:\s*minmax\(200px,\s*235px\)\s+minmax\(0,\s*1fr\)/);
+  assert.match(formsControlsCssContent, /\.env-modal-body\s*\{[\s\S]*overflow-y:\s*auto/);
+  assert.match(formsControlsCssContent, /\.env-modal-side\s*\{[\s\S]*overflow:\s*visible/);
+  assert.match(formsControlsCssContent, /\.env-modal-value-card\s*\{[\s\S]*min-width:\s*0/);
+  assert.match(formsControlsCssContent, /\.multi-select-toolbar\s*\{[\s\S]*flex-wrap:\s*wrap/);
+  assert.match(formsControlsCssContent, /\.map-item-grid\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+auto\s+minmax\(0,\s*1fr\)\s+auto/);
+  assert.match(formsControlsCssContent, /@media\s*\(max-width:\s*900px\)\s*\{[\s\S]*\.env-modal-shell\s*\{[\s\S]*display:\s*flex;[\s\S]*flex-direction:\s*column/);
+  assert.match(formsControlsCssContent, /@media\s*\(max-width:\s*900px\)\s*\{[\s\S]*\.env-modal-side\s*\{[\s\S]*align-self:\s*stretch;[\s\S]*width:\s*100%;[\s\S]*max-height:\s*none;[\s\S]*overflow:\s*visible/);
+  assert.match(formsControlsCssContent, /\.env-modal-meta-list\s*\{[\s\S]*display:\s*grid;[\s\S]*grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(min\(100%,\s*13rem\),\s*1fr\)\)/);
+  assert.match(formsControlsCssContent, /\.env-modal-meta-field\s*\{[\s\S]*display:\s*flex;[\s\S]*flex-direction:\s*column;[\s\S]*min-width:\s*0/);
+  assert.match(formsControlsCssContent, /\.env-modal-meta-field\s+\.form-input,[\s\S]*\.env-modal-meta-field\s+\.form-select\s*\{[\s\S]*width:\s*100%/);
+  assert.match(formsControlsCssContent, /@media\s*\(max-width:\s*900px\)\s*\{[\s\S]*\.env-modal-meta-list\s*\{[\s\S]*grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(min\(100%,\s*12rem\),\s*1fr\)\)/);
+  assert.match(formsControlsCssContent, /@media\s*\(max-width:\s*720px\)\s*\{[\s\S]*\.map-item-grid\s*\{[\s\S]*grid-template-columns:\s*1fr/);
+  assert.match(formsControlsCssContent, /@media\s*\(max-width:\s*720px\)\s*\{[\s\S]*\.custom-merge-rule-grid\s*\{[\s\S]*grid-template-columns:\s*1fr/);
+  assert.match(formsControlsCssContent, /@media\s*\(max-width:\s*720px\)\s*\{[\s\S]*\.timeline-offset-actions,\s*\n\s*\.custom-merge-rules-actions\s*\{[\s\S]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
+  assert.match(formsControlsCssContent, /@media\s*\(max-width:\s*720px\)\s*\{[\s\S]*\.anime-cache-card-body\s*\{[\s\S]*display:\s*grid;[\s\S]*grid-template-columns:\s*34px\s+minmax\(0,\s*1fr\)\s+auto/);
+  assert.match(responsiveCssContent, /#env-modal\.modal-overlay\s*\{[\s\S]*padding:\s*0\.75rem/);
+  assert.match(responsiveCssContent, /#env-modal\s+\.env-modal-container\s*\{[\s\S]*margin:\s*0/);
+  assert.match(responsiveCssContent, /\.env-modal-footer\.modal-footer-compact\s*\{[\s\S]*flex-direction:\s*row/);
+});
+
+function getRectSnapshot(el) {
+  const rect = el.getBoundingClientRect();
+  return {
+    width: rect.width,
+    height: rect.height,
+    clientWidth: el.clientWidth,
+    scrollWidth: el.scrollWidth
+  };
+}
+
+test('system settings env modal should keep mobile controls full-width in a real browser layout', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage({ viewport: { width: 393, height: 852 } });
+    await page.addInitScript(() => {
+      window.fetch = async () => ({ ok: true, json: async () => ({ success: true, data: [] }) });
+    });
+    await page.setContent(HTML_TEMPLATE, { waitUntil: 'domcontentloaded' });
+
+    const timelineEditorMarkup = `
+      <div class="timeline-offset-panel">
+        <div class="timeline-offset-header">
+          <div class="timeline-offset-title">时间轴偏移规则</div>
+          <div class="timeline-offset-actions">
+            <button type="button" class="btn btn-secondary btn-sm">📊 查看最近数据</button>
+            <button type="button" class="btn btn-primary btn-sm">新增规则</button>
+          </div>
+        </div>
+        <div class="timeline-offset-list"><div class="timeline-offset-empty">暂无规则</div></div>
+      </div>
+    `;
+
+    const customMergeMarkup = `
+      <div class="custom-merge-rules-panel">
+        <div class="custom-merge-rules-header">
+          <div><div class="custom-merge-rules-title">自定义合并规则</div></div>
+          <div class="custom-merge-rules-actions">
+            <button type="button" class="btn btn-secondary btn-sm">📊 查看最近数据</button>
+            <button type="button" class="btn btn-primary btn-sm">新增规则</button>
+          </div>
+        </div>
+        <div class="custom-merge-rules-list"><div class="custom-merge-rules-empty">暂无规则</div></div>
+      </div>
+    `;
+
+    const recentDataMarkup = `
+      <div class="recent-data-panel" style="display:block">
+        <div class="recent-data-help">点击缓存卡片中的按钮快速填入。</div>
+        <div id="recent-data-list">
+          <div class="anime-cache-list">
+            <div class="anime-cache-card">
+              <div class="anime-cache-card-body">
+                <div class="anime-cache-cover"></div>
+                <div class="anime-cache-info">
+                  <div class="anime-cache-title">很长很长的番剧标题用于测试移动端是否仍然紧凑</div>
+                  <div class="anime-cache-meta">[bilibili] (12集)</div>
+                </div>
+                <div class="anime-cache-actions">
+                  <button type="button" class="btn btn-sm btn-xs">设为副</button>
+                  <button type="button" class="btn btn-primary btn-sm btn-xs">设为主</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    async function renderModal(valueMarkup, type = 'timeline-offset') {
+      await page.evaluate(({ valueMarkup, type }) => {
+        document.getElementById('env-category').value = 'source';
+        document.getElementById('env-key').value = 'CUSTOM_SOURCE_API_URL';
+        document.getElementById('value-type').value = type;
+        document.getElementById('env-description').value = '移动端布局回归测试';
+        document.getElementById('value-input-container').innerHTML = valueMarkup;
+        document.getElementById('env-modal').classList.add('active');
+      }, { valueMarkup, type });
+    }
+
+    async function readLayout(actionSelector) {
+      return page.evaluate((actionSelector) => {
+        const get = (selector) => {
+          const el = document.querySelector(selector);
+          const rect = el.getBoundingClientRect();
+          const style = window.getComputedStyle(el);
+          return {
+            width: rect.width,
+            height: rect.height,
+            clientWidth: el.clientWidth,
+            scrollWidth: el.scrollWidth,
+            display: style.display,
+            flexDirection: style.flexDirection,
+            gridTemplateColumns: style.gridTemplateColumns,
+            fontSize: style.fontSize
+          };
+        };
+        return {
+          viewport: window.innerWidth,
+          container: get('.env-modal-container'),
+          shell: get('.env-modal-shell'),
+          side: get('.env-modal-side'),
+          key: get('#env-key'),
+          valueCard: get('.env-modal-value-card'),
+          action: get(actionSelector)
+        };
+      }, actionSelector);
+    }
+
+    await renderModal(timelineEditorMarkup, 'timeline-offset');
+    const timeline = await readLayout('.timeline-offset-actions');
+    assert.ok(timeline.container.width <= 372, `mobile modal container should leave visible breathing room, got ${timeline.container.width}`);
+    assert.ok(timeline.container.width >= 360, `mobile modal container should still be usable, got ${timeline.container.width}`);
+    assert.ok(timeline.side.width >= timeline.shell.width * 0.98, `meta side should stretch with shell, got side ${timeline.side.width} / shell ${timeline.shell.width}`);
+    assert.ok(timeline.key.scrollWidth <= timeline.key.clientWidth + 1, `env key should not be squeezed, got scroll ${timeline.key.scrollWidth} / client ${timeline.key.clientWidth}`);
+    assert.ok(timeline.action.width >= timeline.valueCard.width * 0.85, `timeline action row should be full-width, got ${timeline.action.width} / ${timeline.valueCard.width}`);
+
+    await renderModal(customMergeMarkup, 'custom-merge-rules');
+    const customMerge = await readLayout('.custom-merge-rules-actions');
+    assert.ok(customMerge.action.width >= customMerge.valueCard.width * 0.85, `custom merge actions should be full-width, got ${customMerge.action.width} / ${customMerge.valueCard.width}`);
+
+    await renderModal(recentDataMarkup, 'custom-merge-rules');
+    const recent = await page.evaluate(() => {
+      const get = (selector) => {
+        const el = document.querySelector(selector);
+        const rect = el.getBoundingClientRect();
+        const style = window.getComputedStyle(el);
+        return {
+          width: rect.width,
+          height: rect.height,
+          display: style.display,
+          gridTemplateColumns: style.gridTemplateColumns,
+          whiteSpace: style.whiteSpace,
+          overflow: style.overflow,
+          textOverflow: style.textOverflow
+        };
+      };
+      return {
+        panel: get('.recent-data-panel'),
+        card: get('.anime-cache-card-body'),
+        title: get('.anime-cache-title'),
+        actions: get('.anime-cache-actions')
+      };
+    });
+    assert.equal(recent.card.display, 'grid');
+    assert.match(recent.card.gridTemplateColumns, /^34px /);
+    assert.ok(recent.card.height <= 64, `recent anime card should stay compact, got ${recent.card.height}`);
+    assert.equal(recent.title.whiteSpace, 'nowrap');
+    assert.equal(recent.title.textOverflow, 'ellipsis');
+    assert.ok(recent.actions.width <= 118, `recent action buttons should not occupy a full row, got ${recent.actions.width}`);
+  } finally {
+    await browser.close();
+  }
 });
 
 function loadRecentDataHelper(helperName) {

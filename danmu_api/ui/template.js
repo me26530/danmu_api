@@ -1078,48 +1078,64 @@ export const HTML_TEMPLATE = /* html */ `
 
     <!-- 模态框：编辑环境变量 -->
     <div class="modal-overlay" id="env-modal">
-        <div class="modal-container modal-lg">
-            <div class="modal-header">
-                <h3 class="modal-title" id="modal-title">编辑配置项</h3>
-                <button class="modal-close" onclick="closeModal()">×</button>
+        <div class="modal-container modal-lg env-modal-container">
+            <div class="modal-header env-modal-header">
+                <div class="env-modal-title-group">
+                    <span class="env-modal-kicker">System Config</span>
+                    <h3 class="modal-title" id="modal-title">编辑配置项</h3>
+                </div>
+                <button class="modal-close" onclick="closeModal()" aria-label="关闭配置编辑">×</button>
             </div>
-            <form id="env-form">
-                <div class="modal-body">
-                    <div class="form-group">
-                        <label class="form-label">变量类别</label>
-                        <select class="form-select" id="env-category" disabled>
-                            <option value="api">API配置</option>
-                            <option value="source">源配置</option>
-                            <option value="match">匹配配置</option>
-                            <option value="danmu">弹幕配置</option>
-                            <option value="cache">缓存配置</option>
-                            <option value="system">系统配置</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">变量名</label>
-                        <input type="text" class="form-input" id="env-key" placeholder="例如: DB_HOST" required readonly>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">值类型</label>
-                        <select class="form-select" id="value-type" onchange="renderValueInput()" disabled>
-                            <option value="text">文本</option>
-                            <option value="boolean">布尔值</option>
-                            <option value="number">数字 (1-100)</option>
-                            <option value="select">单选</option>
-                            <option value="multi-select">多选 (可排序)</option>
-                            <option value="map">映射表</option>
-                            <option value="timeline-offset">时间轴偏移</option>
-                            <option value="custom-merge-rules">自定义合并规则</option>
-                        </select>
-                    </div>
-                    <div class="form-group" id="value-input-container"></div>
-                    <div class="form-group">
-                        <label class="form-label">描述</label>
-                        <textarea class="form-textarea" id="env-description" placeholder="配置项说明" readonly></textarea>
+            <form id="env-form" class="env-modal-form">
+                <div class="modal-body env-modal-body">
+                    <div class="env-modal-shell">
+                        <aside class="env-modal-side" aria-label="配置项元信息">
+                            <div class="env-modal-side-title">配置身份</div>
+                            <div class="env-modal-meta-list">
+                                <div class="form-group env-modal-meta-field">
+                                    <label class="form-label">变量类别</label>
+                                    <select class="form-select" id="env-category" disabled>
+                                        <option value="api">API配置</option>
+                                        <option value="source">源配置</option>
+                                        <option value="match">匹配配置</option>
+                                        <option value="danmu">弹幕配置</option>
+                                        <option value="cache">缓存配置</option>
+                                        <option value="system">系统配置</option>
+                                    </select>
+                                </div>
+                                <div class="form-group env-modal-meta-field">
+                                    <label class="form-label">变量名</label>
+                                    <input type="text" class="form-input env-key-input" id="env-key" placeholder="例如: DB_HOST" required readonly>
+                                </div>
+                                <div class="form-group env-modal-meta-field">
+                                    <label class="form-label">值类型</label>
+                                    <select class="form-select" id="value-type" onchange="renderValueInput()" disabled>
+                                        <option value="text">文本</option>
+                                        <option value="boolean">布尔值</option>
+                                        <option value="number">数字 (1-100)</option>
+                                        <option value="select">单选</option>
+                                        <option value="multi-select">多选 (可排序)</option>
+                                        <option value="map">映射表</option>
+                                        <option value="timeline-offset">时间轴偏移</option>
+                                        <option value="custom-merge-rules">自定义合并规则</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </aside>
+
+                        <section class="env-modal-workspace" aria-label="配置值编辑区">
+                            <div class="env-modal-value-card">
+                                <div class="form-group env-modal-value-group" id="value-input-container"></div>
+                            </div>
+
+                            <div class="env-modal-description-card" aria-label="配置项说明">
+                                <div class="env-modal-section-title">说明</div>
+                                <textarea class="form-textarea env-description-textarea" id="env-description" placeholder="配置项说明" readonly></textarea>
+                            </div>
+                        </section>
                     </div>
                 </div>
-                <div class="modal-footer modal-footer-compact">
+                <div class="modal-footer modal-footer-compact env-modal-footer">
                     <button type="button" class="btn btn-secondary btn-modal" onclick="closeModal()">
                         <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                             <path d="M6 18L18 6M6 6l12 12" stroke-width="2" stroke-linecap="round"/>

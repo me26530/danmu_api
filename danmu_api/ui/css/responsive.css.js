@@ -418,6 +418,11 @@ export const responsiveCssContent = /* css */ `/* ==============================
         gap: 0.625rem;
         padding: 1rem;
     }
+
+    .env-modal-footer.modal-footer-compact {
+        flex-direction: row;
+        align-items: stretch;
+    }
     
     .modal-footer-compact .btn-modal {
         font-size: 0.875rem;
@@ -443,6 +448,25 @@ export const responsiveCssContent = /* css */ `/* ==============================
     .modal-container {
         margin: 1rem;
         max-height: calc(100vh - 2rem);
+    }
+
+    #env-modal.modal-overlay {
+        padding: 0.75rem;
+    }
+
+    #env-modal .env-modal-container {
+        margin: 0;
+        max-width: calc(100vw - 1.5rem);
+        max-height: calc(100dvh - 1.5rem);
+    }
+
+    #env-modal .env-modal-header,
+    #env-modal .env-modal-footer {
+        padding: 0.75rem;
+    }
+
+    #env-modal .env-modal-body {
+        padding: 0.55rem;
     }
 
     .modal-header {
