@@ -4,9 +4,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 
-const repoRoot = path.resolve(import.meta.dirname, '..');
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(__dirname, '..');
 const utilModulePath = path.join(repoRoot, 'danmu_api/utils/bangumi-data-util.js');
 
 function makeTempDir(prefix) {
@@ -163,19 +165,11 @@ test('bangumi-data util should persist node cache to disk and reload it without 
         "import assert from 'node:assert';",
         "import fs from 'node:fs';",
         "import path from 'node:path';",
-        "import { registerHooks } from 'node:module';",
         "import { pathToFileURL } from 'node:url';",
         '',
         'const [repoRoot, tempDir, mockFetchPath] = process.argv.slice(2);',
-        'const mockFetchUrl = pathToFileURL(mockFetchPath).href;',
-        'const hooks = registerHooks({',
-        '  resolve(specifier, context, nextResolve) {',
-        '    if (specifier === \"node-fetch\") {',
-        '      return { shortCircuit: true, url: mockFetchUrl };',
-        '    }',
-        '    return nextResolve(specifier, context);',
-        '  }',
-        '});',
+        'const mockFetchModule = await import(pathToFileURL(mockFetchPath).href);',
+        'globalThis.__bangumiDataFetchImpl = mockFetchModule.default;',
         '',
         'try {',
         '  process.chdir(tempDir);',
@@ -222,7 +216,7 @@ test('bangumi-data util should persist node cache to disk and reload it without 
         '',
         '  console.log(JSON.stringify({ fetchCallsAfterWarmup, finalFetchCalls: globalThis.__bangumiFetchCalls }));',
         '} finally {',
-        '  hooks.deregister();',
+        '  delete globalThis.__bangumiDataFetchImpl;',
         '}',
         ''
       ].join('\n'),

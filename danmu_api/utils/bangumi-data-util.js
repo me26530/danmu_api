@@ -100,6 +100,11 @@ async function getNodeRuntime() {
 }
 
 async function getFetchImpl(preferNodeFetch = false) {
+    const injectedFetch = globalThis.__bangumiDataFetchImpl;
+    if (typeof injectedFetch === 'function') {
+        return injectedFetch;
+    }
+
     if (!preferNodeFetch && typeof globalThis.fetch === 'function') {
         return globalThis.fetch.bind(globalThis);
     }
