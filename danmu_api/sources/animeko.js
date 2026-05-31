@@ -25,7 +25,7 @@ const SUBJECT_CACHE = new Map();
 const SUBJECT_CACHE_TTL = 3 * 60 * 1000; // 缓存有效期：3 分钟 (180000 毫秒)
 const SUBJECT_CACHE_MAX_SIZE = 100; // 最大缓存条目数
 
-// 内置 Bangumi API 反代镜像；仅用于 Animeko 的 Bangumi 搜索接口，Animeko V2 详情/弹幕接口仍按节点直连降级。
+// 内置 Bangumi API 反代镜像；用于 Animeko 的 Bangumi 搜索接口；Animeko V2 详情/弹幕接口在显式配置 PROXY_URL 时同样支持 animeko@ 专用反代。
 const BUILTIN_BANGUMI_SEARCH_PROXY = 'https://api.bangumi.one';
 
 /**
@@ -46,7 +46,7 @@ export default class AnimekoSource extends BaseSource {
   }
 
   /**
-   * 为 Bangumi API 搜索请求应用代理（Animeko API 不走代理）。
+   * 为 Bangumi API 搜索请求应用代理。
    * 优先使用用户 PROXY_URL；未配置时使用内置镜像，并保留直连作为兜底。
    */
   _getSearchRequestUrls(targetUrl) {
@@ -74,6 +74,16 @@ export default class AnimekoSource extends BaseSource {
     }
 
     return urls;
+  }
+
+  /**
+   * 为 Animeko V2 详情/弹幕请求应用用户配置的代理。
+   * 这些接口没有内置镜像；未命中 PROXY_URL 时保持原始节点 URL 以继续按健康状态降级。
+   * @param {string} targetUrl Animeko 原始接口 URL
+   * @returns {string} 代理后的 URL 或原始 URL
+   */
+  _getAnimekoRequestUrl(targetUrl) {
+    return globals.makeProxyUrl(targetUrl) || targetUrl;
   }
 
   /**
@@ -133,10 +143,11 @@ export default class AnimekoSource extends BaseSource {
       const hostIndex = (startIndex + i) % servers.length;
       const hostUrl = servers[hostIndex];
       const targetUrl = `${hostUrl}/v2/subjects/${subjectId}`;
+      const requestUrl = this._getAnimekoRequestUrl(targetUrl);
 
       try {
         log("info", `[Animeko] Animeko API 请求节点: ${hostUrl} (${subjectId})`);
-        const resp = await httpGet(targetUrl, {
+        const resp = await httpGet(requestUrl, {
           headers: this.headers,
           timeout: 3000 // 限制节点请求超时时间为 3000 毫秒，加速故障节点跳过与轮询降级
         });
@@ -709,11 +720,12 @@ export default class AnimekoSource extends BaseSource {
         const hostIndex = (startIndex + i) % servers.length;
         const hostUrl = servers[hostIndex];
         const targetUrl = `${hostUrl}/v1/danmaku/${realId}`;
+        const requestUrl = this._getAnimekoRequestUrl(targetUrl);
 
         log("info", `[Animeko] 尝试使用 ${hostUrl} 节点获取弹幕`);
 
         try {
-            const resp = await httpGet(targetUrl, {
+            const resp = await httpGet(requestUrl, {
               headers: this.headers,
               timeout: 3000 // 限制节点请求超时时间为 3000 毫秒，加速故障节点跳过与轮询降级
             });

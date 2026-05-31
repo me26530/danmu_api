@@ -119,7 +119,7 @@ export const Globals = {
       } else if (conf.startsWith('bilibili@') && hostname.includes('bilibili')) {
          specificProxy = conf.substring(9);
          break;
-      } else if (conf.startsWith('animeko@') && (hostname.includes('animeko') || hostname.includes('bgm.tv'))) {
+      } else if (conf.startsWith('animeko@') && (hostname.includes('animeko') || hostname.includes('bgm.tv') || hostname.includes('openani.org') || hostname.includes('myani.org'))) {
          specificProxy = conf.substring(8);
          break;
       } else if (conf.startsWith('@') && !universalProxy) {

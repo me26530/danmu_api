@@ -29,6 +29,26 @@ test('Animeko Bangumi search honors configured animeko@ proxy before direct fall
   ]);
 });
 
+test('Animeko V2 subject requests honor configured animeko@ proxy', () => {
+  resetRuntime({ PROXY_URL: 'animeko@https://mirror.example.test/base' });
+  const source = new AnimekoSource();
+
+  assert.equal(
+    source._getAnimekoRequestUrl('https://s1.animeko.openani.org/v2/subjects/400602'),
+    'https://mirror.example.test/base/v2/subjects/400602'
+  );
+});
+
+test('Animeko danmaku myani requests honor configured animeko@ proxy', () => {
+  resetRuntime({ PROXY_URL: 'animeko@https://mirror.example.test/base' });
+  const source = new AnimekoSource();
+
+  assert.equal(
+    source._getAnimekoRequestUrl('https://danmaku-cn.myani.org/v1/danmaku/1227087'),
+    'https://mirror.example.test/base/v1/danmaku/1227087'
+  );
+});
+
 test('Animeko filterSearchResults matches infobox 中文名 value', () => {
   resetRuntime();
   const source = new AnimekoSource();
