@@ -1520,6 +1520,8 @@ function checkEpisodeSatisfied(animesList, querySeason, queryEpisode, requestAni
 }
 
 async function handleSearchSourceResults(resultData, queryTitle, targetAnimesList, sourceHandleOptions, lazySearch) {
+  // 跨源 handleAnimes 必须保持 SOURCE_ORDER 串行：各源内部会调用 addAnime 写入全局运行时缓存
+  // (globals.animes / episodeIds / episodeNum)。源内详情请求可以并发，但跨源提交并发会导致缓存顺序、ID 和裁剪行为不稳定。
   for (const key of globals.sourceOrderArr) {
     try {
       if (lazySearch && isGenericLazySourceSupported(key)) {
