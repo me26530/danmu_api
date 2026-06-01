@@ -21,7 +21,10 @@ jobs:
           node-version: 22
 
       - name: Install dependencies
-        run: npm install
+        run: PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
 
       - name: Run test suite
         run: npm test

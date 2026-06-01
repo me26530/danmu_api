@@ -602,7 +602,7 @@ Node / Docker 挂载 `config/.env` 后，大部分业务配置会自动热加载
 | `YOUKU_CONCURRENCY` | 优酷并发数 |
 | `SOURCE_DETAIL_CONCURRENCY` | 单个源处理搜索候选详情/剧集解析的默认并发数，默认 `4`，范围 `1-16`；不是全站 HTTP 并发，也不是弹幕分段下载并发 |
 | `SOURCE_DETAIL_CONCURRENCY_BY_SOURCE` | 按源覆盖详情并发，格式 `源名:并发,源名:并发`，如 `tencent:2,vod:3,iqiyi:4`；适合给容易风控或较慢的源单独降并发 |
-| `PROXY_URL` | 代理 / 反代配置，支持正向代理、万能反代、平台专用反代 |
+| `PROXY_URL` | 代理 / 反代配置，支持正向代理、万能反代、平台专用反代；平台专用字段包括 `bahamut@`、`tmdb@`、`bilibili@`、`animeko@`。Animeko 的 Bangumi 搜索未配置时会内置优先尝试 `https://api.bangumi.one` 并保留直连兜底；Bangumi V0 详情兜底会按“已配置代理 / 反代 → `https://api.bangumi.one` → 官方直连”的顺序降级；显式 `animeko@` 可覆盖 Bangumi 搜索、Animeko V2 详情以及 openani/myani 弹幕节点 |
 | `LOCAL_PROXY_BIND` | 本地 5321 辅助代理绑定地址 |
 | `LOCAL_PROXY_TOKEN` | 本地 5321 辅助代理鉴权 token |
 | `ALLOW_PRIVATE_URLS` | 是否允许访问内网 / 本地 URL，默认 `false` |

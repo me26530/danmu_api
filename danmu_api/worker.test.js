@@ -3071,6 +3071,7 @@ test('worker.js API endpoints', async (t) => {
     Globals.requestHistory = new Map();
     Globals.MAX_ANIMES = 1;
     Globals.envs.rateLimitMaxRequests = 0;
+    Globals.envs.sourceOrderArr = []; // 该用例只验证请求级 detailStore 隔离，避免真实源的模糊搜索结果造成网络型误报。
 
     const leakedDetailStore = new Map();
     addAnime({

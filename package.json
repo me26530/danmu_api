@@ -1,6 +1,6 @@
 {
   "name": "danmu-api-server",
-  "version": "1.19.6",
+  "version": "1.19.8",
   "description": "A danmu Node.js Express API server",
   "main": "danmu_api/server.js",
   "type": "module",
@@ -19,5 +19,8 @@
     "node-fetch": "^3.3.2",
     "pako": "^2.1.0",
     "redis": "^5.11.0"
+  },
+  "devDependencies": {
+    "playwright": "^1.60.0"
   }
 }

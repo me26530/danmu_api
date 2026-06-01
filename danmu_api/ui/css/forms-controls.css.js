@@ -964,9 +964,9 @@ export const formsControlsCssContent = /* css */ `/* ===========================
 
 .recent-data-panel {
     display: none;
-    max-height: min(420px, 48vh);
+    max-height: min(360px, 42vh);
     overflow-y: auto;
-    padding: 0.75rem;
+    padding: 0.65rem;
     border-radius: var(--radius-md);
     border: 1px solid var(--border-color);
     background: var(--bg-secondary);
@@ -1130,6 +1130,12 @@ export const formsControlsCssContent = /* css */ `/* ===========================
     padding: 0.55rem;
 }
 
+.anime-cache-child-item,
+.anime-cache-episode-item,
+.mapping-row {
+    flex: 0 0 auto;
+}
+
 .child-mapping-toggle {
     margin-top: 0.5rem;
     padding: 0.35rem 0.5rem;
@@ -1194,6 +1200,593 @@ export const formsControlsCssContent = /* css */ `/* ===========================
 
     .custom-merge-inline-fields {
         grid-template-columns: 1fr;
+    }
+}
+
+/* ========================================
+   系统配置编辑弹窗：结构化布局与复杂控件防变形
+   ======================================== */
+.env-modal-container {
+    max-width: min(980px, calc(100vw - 2.5rem));
+    width: 100%;
+    max-height: min(88vh, 760px);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.env-modal-header,
+.env-modal-footer {
+    flex-shrink: 0;
+}
+
+.env-modal-title-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    min-width: 0;
+}
+
+.env-modal-kicker {
+    color: var(--text-tertiary);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.env-modal-form {
+    min-height: 0;
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+}
+
+.env-modal-body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 0.85rem;
+    background: linear-gradient(180deg, rgba(var(--primary-rgb), 0.035), transparent 38%);
+}
+
+.env-modal-shell {
+    display: grid;
+    grid-template-columns: minmax(200px, 235px) minmax(0, 1fr);
+    gap: 0.85rem;
+    align-items: stretch;
+    min-width: 0;
+}
+
+.env-modal-side,
+.env-modal-value-card,
+.env-modal-description-card,
+.map-editor-panel,
+.selected-tags-panel,
+.available-tags-panel,
+.staging-card {
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    background: var(--bg-primary);
+    box-shadow: 0 12px 24px rgba(15, 23, 42, 0.055);
+}
+
+.env-modal-side {
+    position: sticky;
+    top: 0;
+    align-self: start;
+    max-height: calc(88vh - 8rem);
+    overflow: visible;
+    padding: 0.85rem;
+}
+
+.env-modal-side-title,
+.env-modal-section-title,
+.map-editor-title,
+.multi-select-title {
+    color: var(--text-primary);
+    font-weight: 700;
+    line-height: 1.3;
+}
+
+.env-modal-meta-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
+    align-items: end;
+    gap: 0.6rem;
+    margin-top: 0.7rem;
+}
+
+.env-modal-meta-field {
+    margin-bottom: 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.34rem;
+}
+
+.env-modal-value-group {
+    margin-bottom: 0;
+}
+
+.env-modal-meta-field .form-label {
+    margin-bottom: 0;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    white-space: nowrap;
+}
+
+.env-modal-meta-field .form-input,
+.env-modal-meta-field .form-select {
+    width: 100%;
+    min-width: 0;
+    padding: 0.54rem 0.68rem;
+}
+
+.env-modal-workspace {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.env-modal-value-card {
+    min-width: 0;
+    padding: 0.85rem;
+}
+
+.env-modal-description-card {
+    padding: 0.8rem;
+}
+
+.env-modal-section-head,
+.map-editor-head,
+.available-tags-head,
+.multi-select-toolbar,
+.custom-merge-rule-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.multi-select-toolbar {
+    flex-wrap: wrap;
+}
+
+.env-modal-section-desc,
+.map-editor-hint,
+.multi-select-hint,
+.staging-copy span {
+    margin: 0.25rem 0 0;
+    color: var(--text-secondary);
+    font-size: 0.84rem;
+    line-height: 1.5;
+}
+
+.env-modal-value-group > label.form-label,
+.env-modal-value-group > label:not(.switch) {
+    color: var(--text-secondary);
+    font-size: 0.84rem;
+    font-weight: 650;
+}
+
+.env-description-textarea {
+    min-height: 72px;
+    resize: vertical;
+    margin-top: 0.45rem;
+    background: var(--bg-secondary);
+}
+
+.multi-select-container {
+    gap: 0.8rem;
+}
+
+.selected-tags-panel,
+.available-tags-panel,
+.staging-card {
+    padding: 0.85rem;
+    background: var(--bg-secondary);
+}
+
+.selected-tags,
+.available-tags {
+    min-height: 56px;
+    padding: 0.75rem;
+    border-width: 1px;
+}
+
+.selected-tags.empty::before {
+    line-height: 1.4;
+    padding: 0.9rem 0;
+}
+
+.staging-card {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.75rem;
+    align-items: center;
+    border-style: dashed;
+}
+
+.staging-copy {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.staging-area {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    min-height: 38px;
+}
+
+.confirm-merge-btn {
+    white-space: nowrap;
+}
+
+.map-editor-panel {
+    padding: 1rem;
+}
+
+.map-container {
+    margin-top: 0.85rem;
+    display: grid;
+    gap: 0.55rem;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 0.15rem;
+}
+
+.map-item-grid {
+    display: grid;
+    grid-template-columns: minmax(15rem, 1fr) 2.2rem minmax(15rem, 1fr) auto;
+    align-items: center;
+    gap: 0.55rem;
+    min-width: max-content;
+}
+
+.map-item-grid .form-input {
+    min-width: 0;
+}
+
+.map-separator {
+    width: 2.2rem;
+    text-align: center;
+    color: var(--text-secondary);
+    font-weight: 700;
+}
+
+.map-remove-btn {
+    white-space: nowrap;
+}
+
+.custom-merge-rule-actions {
+    justify-content: flex-end;
+}
+
+.custom-merge-action {
+    width: auto;
+    min-width: 132px;
+}
+
+.timeline-offset-actions,
+.custom-merge-rules-actions,
+.recent-data-controls,
+.color-pool-controls,
+.ai-apikey-actions {
+    row-gap: 0.55rem;
+}
+
+.env-modal-value-card .btn,
+.custom-merge-rules-panel .btn,
+.timeline-offset-panel .btn,
+.map-editor-panel .btn,
+.multi-select-container .btn {
+    border-radius: 999px;
+}
+
+[data-theme="dark"] .env-modal-side,
+[data-theme="dark"] .env-modal-value-card,
+[data-theme="dark"] .env-modal-description-card,
+[data-theme="dark"] .map-editor-panel,
+[data-theme="dark"] .selected-tags-panel,
+[data-theme="dark"] .available-tags-panel,
+[data-theme="dark"] .staging-card {
+    background: rgba(11, 17, 29, 0.88);
+    border-color: rgba(129, 140, 248, 0.16);
+    box-shadow: 0 18px 34px rgba(2, 6, 23, 0.34);
+}
+
+@media (max-width: 900px) {
+    .env-modal-container {
+        max-height: calc(100vh - 1rem);
+    }
+
+    .env-modal-shell {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .env-modal-body {
+        overflow-y: auto;
+        padding: 0.85rem;
+    }
+
+    .env-modal-side {
+        position: static;
+        align-self: stretch;
+        width: 100%;
+        min-width: 0;
+        box-sizing: border-box;
+        max-height: none;
+        overflow: visible;
+        padding: 0.85rem;
+    }
+
+    .env-modal-meta-list {
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+        gap: 0.65rem;
+        margin-top: 0.65rem;
+    }
+
+    .env-modal-meta-field {
+        min-width: 0;
+    }
+
+    .env-modal-meta-field .form-label {
+        margin-bottom: 0;
+        color: var(--text-secondary);
+        font-size: 0.8rem;
+        white-space: nowrap;
+    }
+
+    .env-modal-meta-field .form-input,
+    .env-modal-meta-field .form-select {
+        min-width: 0;
+        padding: 0.62rem 0.78rem;
+    }
+}
+
+@media (max-width: 720px) {
+    .env-modal-container {
+        max-width: calc(100vw - 1.5rem);
+        max-height: calc(100dvh - 1.5rem);
+        border-radius: 16px;
+    }
+
+    .env-modal-header,
+    .env-modal-footer {
+        padding: 0.75rem;
+    }
+
+    .env-modal-header .modal-title {
+        font-size: 1rem;
+    }
+
+    .env-modal-kicker {
+        display: none;
+    }
+
+    .env-modal-body {
+        padding: 0.55rem;
+    }
+
+    .env-modal-shell,
+    .env-modal-workspace {
+        gap: 0.55rem;
+    }
+
+    .env-modal-side,
+    .env-modal-value-card,
+    .env-modal-description-card {
+        padding: 0.62rem;
+        border-radius: var(--radius-md);
+    }
+
+    .env-modal-meta-list {
+        gap: 0.5rem;
+        margin-top: 0.5rem;
+    }
+
+    .env-modal-meta-field .form-input,
+    .env-modal-meta-field .form-select {
+        padding: 0.48rem 0.58rem;
+        font-size: 0.82rem;
+    }
+
+    .env-description-textarea {
+        min-height: 48px;
+        max-height: 72px;
+        font-size: 0.8rem;
+    }
+
+    .env-modal-meta-list,
+    .map-item-grid,
+    .custom-merge-inline-fields,
+    .timeline-offset-row,
+    .timeline-offset-modal-grid,
+    .staging-card {
+        grid-template-columns: 1fr;
+    }
+
+    .map-item-grid {
+        align-items: center;
+        grid-template-columns: minmax(14rem, 1fr) 2rem minmax(14rem, 1fr) auto;
+        gap: 0.45rem;
+        overflow-x: visible;
+        padding-bottom: 0;
+    }
+
+    .map-separator {
+        width: 2rem;
+        transform: none;
+    }
+
+    .custom-merge-rule-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .custom-merge-arrow {
+        min-height: 2.25rem;
+    }
+
+    .recent-data-controls,
+    .map-editor-head,
+    .multi-select-toolbar,
+    .custom-merge-rule-actions,
+    .timeline-offset-header,
+    .custom-merge-rules-header {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .timeline-offset-actions,
+    .custom-merge-rules-actions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        width: 100%;
+        align-items: stretch;
+        gap: 0.5rem;
+    }
+
+    .recent-data-controls .btn,
+    .map-editor-head .btn,
+    .multi-select-toolbar .btn,
+    .custom-merge-rule-actions .btn,
+    .custom-merge-rule-actions .form-select {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .timeline-offset-actions .btn,
+    .custom-merge-rules-actions .btn {
+        min-width: 0;
+        width: 100%;
+        justify-content: center;
+        padding-left: 0.65rem;
+        padding-right: 0.65rem;
+        white-space: nowrap;
+    }
+
+    .timeline-offset-line {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .recent-data-panel {
+        max-height: min(260px, 34vh);
+        padding: 0.42rem;
+    }
+
+    .recent-data-help {
+        margin-bottom: 0.45rem;
+        font-size: 0.76rem;
+        line-height: 1.35;
+    }
+
+    .anime-cache-list,
+    .merged-children-container,
+    .episodes-list-container,
+    .child-mapping-container {
+        gap: 0.38rem;
+    }
+
+    .anime-cache-card-body {
+        display: grid;
+        grid-template-columns: 34px minmax(0, 1fr) auto;
+        gap: 0.48rem;
+        align-items: center;
+        padding: 0.45rem;
+    }
+
+    .anime-cache-child-main {
+        display: grid;
+        grid-template-columns: 26px minmax(0, 1fr) auto;
+        gap: 0.42rem;
+        align-items: center;
+    }
+
+    .anime-cache-cover {
+        width: 34px;
+        height: 46px;
+    }
+
+    .anime-cache-child-cover {
+        width: 26px;
+        height: 36px;
+    }
+
+    .anime-cache-title,
+    .anime-cache-child-title,
+    .anime-cache-meta,
+    .anime-cache-episode-item {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        overflow-wrap: normal;
+        word-break: normal;
+    }
+
+    .anime-cache-title {
+        font-size: 0.84rem;
+        line-height: 1.2;
+    }
+
+    .anime-cache-child-title {
+        font-size: 0.78rem;
+        line-height: 1.2;
+    }
+
+    .anime-cache-meta {
+        margin-top: 0.1rem;
+        font-size: 0.66rem;
+    }
+
+    .anime-cache-actions,
+    .anime-cache-child-actions {
+        flex-direction: row;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 0.25rem;
+    }
+
+    .anime-cache-actions .btn-xs,
+    .anime-cache-child-actions .btn-xs {
+        padding: 0.18rem 0.38rem;
+        font-size: 0.66rem;
+        min-height: 1.45rem;
+        white-space: nowrap;
+    }
+
+    .anime-cache-footer {
+        padding: 0.38rem 0.45rem;
+        gap: 0.3rem;
+    }
+
+    .cache-badge {
+        padding: 0.18rem 0.45rem;
+        font-size: 0.66rem;
+    }
+
+    .merged-children-container,
+    .episodes-list-container {
+        padding: 0.42rem 0.45rem;
+    }
+
+    .anime-cache-child-item,
+    .anime-cache-episode-item {
+        padding: 0.38rem;
+    }
+
+    .child-mapping-toggle {
+        margin-top: 0.35rem;
+        padding: 0.25rem 0.4rem;
+        font-size: 0.68rem;
     }
 }
 

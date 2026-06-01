@@ -7,8 +7,8 @@ WORKDIR /app
 # 复制 package.json 和 package-lock.json（如果存在）
 COPY package*.json ./
 
-# 安装项目依赖
-RUN npm install
+# 安装运行时依赖（测试用 devDependencies 不进入最终镜像）
+RUN npm install --omit=dev
 
 # 复制所有源代码
 COPY danmu_api/ ./danmu_api/
