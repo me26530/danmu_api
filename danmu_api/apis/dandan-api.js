@@ -44,6 +44,7 @@ import AnimekoSource from "../sources/animeko.js";
 import EzdmwSource from "../sources/ezdmw.js";
 import OtherSource from "../sources/other.js";
 import { Anime, AnimeMatch, Episodes, Bangumi } from "../models/dandan-model.js";
+import { mapWithConcurrency, normalizeConcurrency } from "../utils/concurrency-util.js";
 
 // =====================
 // 兼容弹弹play接口
@@ -1388,6 +1389,73 @@ function buildBangumiData(anime, idParam = "") {
     errorMessage: "",
     bangumi
   };
+}
+
+export async function collectSearchEpisodesResults(searchAnimes, url, requestAnimeDetailsMap = new Map(), episode = "", options = {}) {
+  if (!Array.isArray(searchAnimes) || searchAnimes.length === 0) {
+    return [];
+  }
+
+  const detailConcurrency = normalizeConcurrency(options.detailConcurrency ?? globals.sourceDetailConcurrency, 4, 8);
+  const resolveDetailFromStore = options.resolveDetailFromStore || ((animeItem) =>
+    resolveAnimeByIdFromDetailStore(animeItem?.bangumiId, requestAnimeDetailsMap, animeItem?.source) ||
+    resolveAnimeByIdFromDetailStore(animeItem?.animeId, requestAnimeDetailsMap, animeItem?.source)
+  );
+  const loadBangumi = options.loadBangumi || (async (animeItem) => {
+    const bangumiUrl = new URL(`/bangumi/${animeItem.bangumiId || animeItem.animeId}`, url.origin);
+    const bangumiRes = await getBangumi(bangumiUrl.pathname, requestAnimeDetailsMap, animeItem.source);
+    return bangumiRes.json();
+  });
+
+  const resultAnimes = await mapWithConcurrency(searchAnimes, detailConcurrency, async (animeItem) => {
+    try {
+      const detailAnime = resolveDetailFromStore(animeItem);
+      const bangumiData = detailAnime
+        ? buildBangumiData(detailAnime, animeItem.bangumiId || animeItem.animeId)
+        : await loadBangumi(animeItem, requestAnimeDetailsMap, url);
+
+      if (bangumiData?.success && bangumiData?.bangumi && bangumiData.bangumi.episodes) {
+        let filteredEpisodes = bangumiData.bangumi.episodes;
+
+        if (episode) {
+          if (episode === "movie") {
+            filteredEpisodes = bangumiData.bangumi.episodes.filter(ep =>
+              animeItem.typeDescription && (
+                animeItem.typeDescription.includes("电影") ||
+                animeItem.typeDescription.includes("剧场版") ||
+                ep.episodeTitle.toLowerCase().includes("movie") ||
+                ep.episodeTitle.includes("剧场版")
+              )
+            );
+          } else if (/^\d+$/.test(episode)) {
+            const targetEpisode = parseInt(episode, 10);
+            filteredEpisodes = bangumiData.bangumi.episodes.filter(ep =>
+              parseInt(ep.episodeNumber, 10) === targetEpisode
+            );
+          }
+        }
+
+        if (filteredEpisodes.length > 0) {
+          return Episodes.fromJson({
+            animeId: animeItem.animeId,
+            animeTitle: animeItem.animeTitle,
+            type: animeItem.type,
+            typeDescription: animeItem.typeDescription,
+            episodes: filteredEpisodes.map(ep => ({
+              episodeId: ep.episodeId,
+              episodeTitle: ep.episodeTitle
+            }))
+          });
+        }
+      }
+    } catch (error) {
+      log("warn", `[searchEpisodes] Failed to materialize ${animeItem?.animeTitle || animeItem?.bangumiId || animeItem?.animeId}: ${error.message}`);
+    }
+
+    return null;
+  });
+
+  return resultAnimes.filter(Boolean);
 }
 
 function tryFastMatchFromPreferCache({ title, season, episode, year, preferAnimeId, preferSource, preferredPlatform, offsets = null, detailStore = null }) {
@@ -3148,62 +3216,12 @@ export async function searchEpisodes(url) {
     });
   }
 
-  let resultAnimes = [];
-
-  // 遍历所有找到的动漫，获取它们的集数信息
-  for (const animeItem of searchData.animes) {
-    const detailAnime =
-      resolveAnimeByIdFromDetailStore(animeItem.bangumiId, requestAnimeDetailsMap, animeItem.source) ||
-      resolveAnimeByIdFromDetailStore(animeItem.animeId, requestAnimeDetailsMap, animeItem.source);
-
-    let bangumiData = null;
-    if (detailAnime) {
-      bangumiData = buildBangumiData(detailAnime, animeItem.bangumiId || animeItem.animeId);
-    } else {
-      const bangumiUrl = new URL(`/bangumi/${animeItem.bangumiId || animeItem.animeId}`, url.origin);
-      const bangumiRes = await getBangumi(bangumiUrl.pathname, requestAnimeDetailsMap, animeItem.source);
-      bangumiData = await bangumiRes.json();
-    }
-
-    if (bangumiData.success && bangumiData.bangumi && bangumiData.bangumi.episodes) {
-      let filteredEpisodes = bangumiData.bangumi.episodes;
-
-      // 根据 episode 参数过滤集数
-      if (episode) {
-        if (episode === "movie") {
-          // 仅保留剧场版结果
-          filteredEpisodes = bangumiData.bangumi.episodes.filter(ep =>
-            animeItem.typeDescription && (
-              animeItem.typeDescription.includes("电影") ||
-              animeItem.typeDescription.includes("剧场版") ||
-              ep.episodeTitle.toLowerCase().includes("movie") ||
-              ep.episodeTitle.includes("剧场版")
-            )
-          );
-        } else if (/^\d+$/.test(episode)) {
-          // 纯数字，仅保留指定集数
-          const targetEpisode = parseInt(episode);
-          filteredEpisodes = bangumiData.bangumi.episodes.filter(ep =>
-            parseInt(ep.episodeNumber) === targetEpisode
-          );
-        }
-      }
-
-      // 只有当过滤后还有集数时才添加到结果中
-      if (filteredEpisodes.length > 0) {
-        resultAnimes.push(Episodes.fromJson({
-          animeId: animeItem.animeId,
-          animeTitle: animeItem.animeTitle,
-          type: animeItem.type,
-          typeDescription: animeItem.typeDescription,
-          episodes: filteredEpisodes.map(ep => ({
-            episodeId: ep.episodeId,
-            episodeTitle: ep.episodeTitle
-          }))
-        }));
-      }
-    }
-  }
+  const resultAnimes = await collectSearchEpisodesResults(
+    searchData.animes,
+    url,
+    requestAnimeDetailsMap,
+    episode,
+  );
 
   log("info", `Found ${resultAnimes.length} animes with filtered episodes`);
 
