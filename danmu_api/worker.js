@@ -1,4 +1,4 @@
-import { Globals } from './configs/globals.js';
+import { Globals, globals } from './configs/globals.js';
 import { jsonResponse } from './utils/http-util.js';
 import { log, formatLogMessage } from './utils/log-util.js'
 import { getRedisCaches, judgeRedisValid, updateRedisCaches } from "./utils/redis-util.js";
@@ -22,7 +22,6 @@ import {
     handleCookieVerify,
     handleCookieRefreshToken
 } from "./utils/cookie-util.js";
-let globals;
 const ADMIN_MUTATION_ROUTES = new Set([
   'POST /api/logs/clear',
   'POST /api/env/set',
@@ -105,7 +104,7 @@ function getAdminGuardResponse(path, method, authContext) {
 
 async function handleRequest(req, env, deployPlatform, clientIp, ctx) {
   // 加载全局变量和环境变量配置
-  globals = Globals.init(env);
+  Globals.init(env);
 
   const url = new URL(req.url);
   let path = url.pathname;

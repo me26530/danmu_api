@@ -130,6 +130,18 @@ function createFetchResponse(body, overrides = {}) {
 const urlPrefix = "http://localhost:9321";
 const token = "87654321";
 
+test('worker.js uses shared globals proxy without local globals binding', () => {
+  const workerSource = fs.readFileSync(new URL('./worker.js', import.meta.url), 'utf8');
+
+  assert.match(
+    workerSource,
+    /import\s*\{\s*Globals\s*,\s*globals\s*\}\s*from\s*['"]\.\/configs\/globals\.js['"]/,
+  );
+  assert.doesNotMatch(workerSource, /^\s*(?:let|const|var)\s+globals\b/m);
+  assert.doesNotMatch(workerSource, /\bglobals\s*=\s*Globals\.init\(/);
+  assert.match(workerSource, /\bGlobals\.init\(env\);/);
+});
+
 function createSearchResult(anime) {
   return {
     animeId: anime.animeId,
