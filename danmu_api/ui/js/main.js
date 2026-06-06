@@ -1392,7 +1392,15 @@ function updateVersionStatusAll(state, text) {
     statusEls.forEach(function(item) {
         if (!item.el) return;
         item.el.className = item.prefix + ' ' + item.prefix + (stateClass[state] || '');
-        item.el.textContent = text;
+        let displayText = text;
+        if (item.el.id === 'hero-version-status' && state === 'uptodate') {
+            displayText = String(text || '')
+                .replace(/^当前/, '')
+                .replace(/\\s+/g, '')
+                .replace(/^v/i, '');
+            displayText = displayText ? ('v' + displayText) : '版本就绪';
+        }
+        item.el.textContent = displayText;
     });
 }
 
@@ -1473,7 +1481,7 @@ function copyApiEndpoint() {
 
             const feedbackCards = new Set();
             endpointElements.forEach(element => {
-                const card = element.closest('.api-endpoint-card, .hero-endpoint-panel');
+                const card = element.closest('.api-endpoint-card, .hero-endpoint-panel, .home-entry-endpoint');
                 if (card) {
                     feedbackCards.add(card);
                 }
