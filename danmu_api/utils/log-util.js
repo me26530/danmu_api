@@ -1,24 +1,14 @@
 import { globals } from '../configs/globals.js';
 
 // =====================
-// 路由请求相关
+// 日志记录工具
 // =====================
 
 export function log(level, ...args) {
-  // 兼容历史/非标准 level：避免出现 "console[level] is not a function" 直接打断业务流程
-  // - 某些源使用 "warning"，这里统一映射到 "warn"
-  // - 允许使用 "log"，统一按 "info" 的级别规则处理
-  const levelAlias = {
-    warning: 'warn',
-    log: 'info',
-  };
-  const resolvedLevel = levelAlias[level] || level;
-
   // 根据日志级别决定是否输出
-  const levels = { error: 0, warn: 1, info: 2, debug: 3 };
+  const levels = { error: 0, warn: 1, info: 2 };
   const currentLevelValue = levels[globals.logLevel] !== undefined ? levels[globals.logLevel] : 1;
-  const resolvedLevelValue = levels[resolvedLevel] !== undefined ? levels[resolvedLevel] : levels.info;
-  if (resolvedLevelValue > currentLevelValue) {
+  if ((levels[level] || 0) > currentLevelValue) {
     return; // 日志级别不符合，不输出
   }
 
@@ -43,10 +33,9 @@ export function log(level, ...args) {
   const shanghaiTime = new Date(now.getTime() + (8 * 60 * 60 * 1000));
   const timestamp = shanghaiTime.toISOString().replace('Z', '+08:00');
 
-  globals.logBuffer.push({ timestamp, level: resolvedLevel, message });
+  globals.logBuffer.push({ timestamp, level, message });
   if (globals.logBuffer.length > globals.MAX_LOGS) globals.logBuffer.shift();
-  const consoleFn = typeof console[resolvedLevel] === 'function' ? console[resolvedLevel] : console.log;
-  consoleFn(...processedArgs);
+  console[level](...processedArgs);
 }
 
 // 隐藏敏感信息的辅助函数

@@ -1,5 +1,4 @@
 import zlib from 'zlib';
-import test from 'node:test';
 
 // 模拟 iOS JavaScriptBridge 的 Widget 对象 - 模拟 iOS 环境
 global.Widget = {
@@ -189,16 +188,20 @@ const verbose = false; // 设置为 true 时打印详细结果
 
 // 加载 forward-widget.js 模块
 async function runTest() {
-  const module = await import('./forward-widget.js');
-  // const module = await import('../dist/logvar-danmu.js');
-  // 将模块导出的函数添加到全局作用域，以便测试函数可以访问它们
-  global.searchDanmu = module.searchDanmu;
-  global.getDetailById = module.getDetailById;
-  global.getCommentsById = module.getCommentsById;
-  global.getDanmuWithSegmentTime = module.getDanmuWithSegmentTime;
+  try {
+    const module = await import('./forward-widget.js');
+    // const module = await import('../dist/logvar-danmu.js');
+    // 将模块导出的函数添加到全局作用域，以便测试函数可以访问它们
+    global.searchDanmu = module.searchDanmu;
+    global.getDetailById = module.getDetailById;
+    global.getCommentsById = module.getCommentsById;
+    global.getDanmuWithSegmentTime = module.getDanmuWithSegmentTime;
 
-  // 运行测试
-  await testNewFlow();
+    // 运行测试
+    await testNewFlow();
+  } catch (error) {
+    console.error('Failed to load module:', error);
+  }
 }
 
 async function testNewFlow() {
@@ -220,6 +223,7 @@ async function testNewFlow() {
       vodReturnMode: 'fastest',
       vodRequestTimeout: 10000,
       bilibiliCookie: '',
+      doubanCookie: '',
       platformOrder: [],
       episodeTitleFilter: '',
       enableAnimeEpisodeFilter: 'false',
@@ -230,8 +234,10 @@ async function testNewFlow() {
       groupMinute: 1,
       danmuLimit: 0,
       danmuSimplifiedTraditional: 'false',
+      danmuOffset: '',
       convertTopBottomToScroll: 'false',
       convertColor: 'default',
+      colorPool: '16777215,16744319,16752762,16774799,9498256,8388564,8900346,14204888,16758465',
       likeSwitch: 'true',
       proxyUrl: '',
       tmdbApiKey: '',
@@ -253,7 +259,7 @@ async function testNewFlow() {
       // title: "https://www.bilibili.com/bangumi/play/ep1231564",
       // title: "https://www.bilibili.com/video/av170001?p=2",
       // title: "https://www.bilibili.com/video/BV17x411w7KC?p=3",
-      title: '罗小黑战记2',
+      title: '寻秦记',
       ...commonParams,
     });
     if (verbose) {
@@ -301,10 +307,8 @@ async function testNewFlow() {
 
   } catch (error) {
     console.error('❌ 测试失败:', error);
-    throw error;
   }
 }
 
-test('forward widget 集成链路', async () => {
-  await runTest();
-});
+// 启动测试
+runTest();

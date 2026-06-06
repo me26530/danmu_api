@@ -4,12 +4,6 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-const ENV_KEY_PATTERN = /^[A-Z_][A-Z0-9_]*$/;
-
-function isValidEnvKey(key) {
-  return typeof key === 'string' && ENV_KEY_PATTERN.test(key.trim());
-}
-
 // =====================
 // Node环境变量处理类
 // =====================
@@ -19,9 +13,6 @@ export class NodeHandler extends BaseHandler {
    * 在本地配置文件中设置环境变量
    */
   updateConfigValue(key, value) {
-    if (!isValidEnvKey(key)) {
-      throw new Error('环境变量名称格式无效，仅支持大写字母、数字和下划线，且不能以数字开头');
-    }
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = path.dirname(__filename);
 
@@ -73,13 +64,13 @@ export class NodeHandler extends BaseHandler {
         }
 
         fs.writeFileSync(envPath, lines.join('\n'), 'utf8');
-        log("info", `[server] Updated ${key} in .env`);
+        log("info", `[system] [Server] Updated ${key} in .env`);
         updated = true;
       }
 
       return updated;
     } catch (error) {
-      log("error", '[server] Error updating configuration:', error.message);
+      log("error", '[system] [Server] Error updating configuration:', error.message);
       throw error;
     }
   }
@@ -88,10 +79,7 @@ export class NodeHandler extends BaseHandler {
    * 设置环境变量并重新初始化全局配置
    */
   async setEnv(key, value) {
-    if (!isValidEnvKey(key)) {
-      throw new Error('环境变量名称格式无效，仅支持大写字母、数字和下划线，且不能以数字开头');
-    }
-    log("info", '[server] Setting environment variable:', key, '=', value);
+    log("info", '[system] [Server] Setting environment variable:', key, '=', value);
 
     try {
       // 更新配置文件
@@ -103,7 +91,7 @@ export class NodeHandler extends BaseHandler {
 
       return this.updateLocalEnv(key, value);
     } catch (error) {
-      log("error", '[server] ✗ Failed to set environment variable:', error.message);
+      log("error", '[system] [Server] ✗ Failed to set environment variable:', error.message);
     }
   }
 
@@ -119,9 +107,6 @@ export class NodeHandler extends BaseHandler {
    * 删除环境变量
    */
   async delEnv(key) {
-    if (!isValidEnvKey(key)) {
-      throw new Error('环境变量名称格式无效，仅支持大写字母、数字和下划线，且不能以数字开头');
-    }
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = path.dirname(__filename);
 
@@ -142,7 +127,7 @@ export class NodeHandler extends BaseHandler {
         });
 
         fs.writeFileSync(envPath, filteredLines.join('\n'), 'utf8');
-        log("info", `[server] Deleted ${key} from .env`);
+        log("info", `[system] [Server] Deleted ${key} from .env`);
         deleted = true;
       }
 
@@ -152,7 +137,7 @@ export class NodeHandler extends BaseHandler {
 
       return false;
     } catch (error) {
-      log("error", '[server] ✗ Failed to delete environment variable:', error.message);
+      log("error", '[system] [Server] ✗ Failed to delete environment variable:', error.message);
     }
   }
 }
