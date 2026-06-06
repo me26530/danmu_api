@@ -268,8 +268,7 @@ export const HTML_TEMPLATE = /* html */ `
                                 <span class="hero-version-status hero-version-status-checking" id="hero-version-status">检查中...</span>
                             </button>
                         </div>
-                        <h2 class="service-entry-title">把弹幕服务接入播放器，只保留真正需要的入口。</h2>
-                        <p class="service-entry-subtitle">复制接入地址、验证接口、查看日志和调整配置都从这里开始。后端跟随上游，首页只呈现稳定且可操作的信息。</p>
+                        <h2 class="service-entry-title">LogVar 弹幕 API</h2>
 
                         <button class="service-entry-endpoint hero-endpoint-panel" onclick="copyApiEndpoint()" type="button" aria-label="复制播放器接入地址">
                             <span class="service-entry-endpoint-copy">
@@ -286,47 +285,6 @@ export const HTML_TEMPLATE = /* html */ `
                     </div>
 
                     <div class="service-entry-right">
-                        <div class="service-entry-actions" aria-label="推荐操作">
-                            <button class="entry-action-card primary" onclick="copyApiEndpoint()" type="button">
-                                <span class="entry-action-icon" aria-hidden="true">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <path d="M10 13a5 5 0 0 0 7.07 0l1.41-1.41a5 5 0 0 0-7.07-7.07L10.7 5.23"/>
-                                        <path d="M14 11a5 5 0 0 0-7.07 0L5.52 12.41a5 5 0 0 0 7.07 7.07l.71-.71"/>
-                                    </svg>
-                                </span>
-                                <span class="entry-action-copy">
-                                    <strong>复制接入</strong>
-                                    <small>直接给播放器使用</small>
-                                </span>
-                            </button>
-                            <button class="entry-action-card" onclick="switchSection('api')" type="button">
-                                <span class="entry-action-icon" aria-hidden="true">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <path d="M8 9l3 3-3 3"/>
-                                        <path d="M13 15h3"/>
-                                        <rect x="3" y="4" width="18" height="16" rx="2"/>
-                                    </svg>
-                                </span>
-                                <span class="entry-action-copy">
-                                    <strong>接口测试</strong>
-                                    <small>验证搜索和弹幕输出</small>
-                                </span>
-                            </button>
-                            <button class="entry-action-card" onclick="switchSection('logs')" type="button">
-                                <span class="entry-action-icon" aria-hidden="true">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                                        <path d="M14 2v6h6"/>
-                                        <path d="M8 13h8M8 17h5"/>
-                                    </svg>
-                                </span>
-                                <span class="entry-action-copy">
-                                    <strong>运行日志</strong>
-                                    <small>查看请求与源站状态</small>
-                                </span>
-                            </button>
-                        </div>
-
                         <div class="service-entry-signal-grid" aria-label="当前服务信号">
                             <div class="entry-signal-card" id="system-status-card">
                                 <span class="stat-icon-wrapper stat-icon-status" id="status-icon-wrapper">
