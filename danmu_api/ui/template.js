@@ -257,49 +257,59 @@ export const HTML_TEMPLATE = /* html */ `
                     <p class="proxy-config-note">设置会保存在浏览器本地存储中，清除网页本地存储或留空后保存即可恢复默认。</p>
                 </div>
 
-                <div class="home-entry-strip" aria-label="LogVar 弹幕 API">
-                    <div class="home-entry-main">
-                        <span class="home-entry-logo" aria-hidden="true">LV</span>
-                        <div class="home-entry-heading">
-                            <div class="home-entry-title-row">
-                                <h2 class="home-entry-title">LogVar 弹幕 API</h2>
-                                <button class="home-entry-version" id="hero-version-panel" onclick="showUpdateGuide()" type="button" title="查看版本信息">
-                                    <span class="hero-version-status hero-version-status-checking" id="hero-version-status">v${globals.version}</span>
-                                </button>
-                                <div class="home-entry-inline-status" id="system-status-card">
-                                    <span class="stat-icon-wrapper stat-icon-status" id="status-icon-wrapper" aria-hidden="true">
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                            <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
-                                        </svg>
-                                    </span>
-                                    <strong class="stat-value stat-value-status" id="system-status">检测中...</strong>
+                <div class="home-entry-strip home-entry-card" aria-label="LogVar 弹幕 API">
+                    <div class="home-entry-card-top">
+                        <div class="home-entry-main">
+                            <span class="home-entry-logo" aria-hidden="true">LV</span>
+                            <div class="home-entry-heading">
+                                <span class="home-entry-kicker">服务入口</span>
+                                <div class="home-entry-title-row">
+                                    <h2 class="home-entry-title">LogVar 弹幕 API</h2>
+                                    <button class="home-entry-version" id="hero-version-panel" onclick="showUpdateGuide()" type="button" title="查看版本信息">
+                                        <span class="hero-version-status hero-version-status-checking" id="hero-version-status">v${globals.version}</span>
+                                    </button>
                                 </div>
                             </div>
                         </div>
+
+                        <div class="home-entry-inline-status" id="system-status-card">
+                            <span class="stat-icon-wrapper stat-icon-status" id="status-icon-wrapper" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+                                </svg>
+                            </span>
+                            <strong class="stat-value stat-value-status" id="system-status">检测中...</strong>
+                        </div>
                     </div>
 
+                    <p class="home-entry-summary">接入播放器、调试接口、查看配置都在这里完成。复制地址后填入播放器的弹幕接口即可。</p>
+
                     <button class="home-entry-endpoint" onclick="copyApiEndpoint()" type="button" aria-label="复制播放器接入地址">
-                        <span class="home-entry-endpoint-label">地址</span>
+                        <span class="home-entry-endpoint-label">播放器接入地址</span>
                         <strong class="home-entry-endpoint-value" id="api-endpoint">加载中...</strong>
-                        <span class="home-entry-copy-icon" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M8 16H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2"/>
-                                <rect x="8" y="8" width="12" height="12" rx="2"/>
-                            </svg>
-                        </span>
+                        <span class="home-entry-copy-text">复制地址</span>
                     </button>
 
-                    <span class="home-entry-hidden-metrics" aria-hidden="true">
-                        <span class="stat-icon-wrapper stat-icon-mode mode-preview" id="mode-icon-wrapper">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0z"/>
-                                <path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
-                            </svg>
-                        </span>
-                        <strong class="hero-mode-value" id="current-mode">检测中...</strong>
-                        <span id="total-configs">-</span>
-                        <span id="manual-configs">-</span>
-                    </span>
+                    <div class="home-entry-insights" aria-label="服务摘要">
+                        <div class="home-entry-insight">
+                            <span class="home-entry-insight-label">访问模式</span>
+                            <strong class="home-entry-insight-value" id="current-mode">检测中...</strong>
+                            <span class="stat-icon-wrapper stat-icon-mode mode-preview" id="mode-icon-wrapper" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0z"/>
+                                    <path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                                </svg>
+                            </span>
+                        </div>
+                        <div class="home-entry-insight">
+                            <span class="home-entry-insight-label">配置项</span>
+                            <strong class="home-entry-insight-value"><span id="total-configs">-</span><small>项</small></strong>
+                        </div>
+                        <div class="home-entry-insight">
+                            <span class="home-entry-insight-label">已配置</span>
+                            <strong class="home-entry-insight-value"><span id="manual-configs">-</span><small>项</small></strong>
+                        </div>
+                    </div>
                 </div>
                 <div class="preview-grid" id="preview-area"></div>
             </section>
