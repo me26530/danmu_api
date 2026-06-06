@@ -257,72 +257,46 @@ export const HTML_TEMPLATE = /* html */ `
                     <p class="proxy-config-note">设置会保存在浏览器本地存储中，清除网页本地存储或留空后保存即可恢复默认。</p>
                 </div>
 
-                <div class="service-entry-card" aria-label="弹幕接入中枢">
-                    <div class="service-entry-glow" aria-hidden="true"></div>
-                    <div class="service-entry-left">
-                        <div class="service-entry-kicker-row">
-                            <span class="service-entry-kicker">接入中枢</span>
-                            <button class="service-entry-version" id="hero-version-panel" onclick="showUpdateGuide()" type="button" title="查看版本信息">
-                                <span id="hero-current-version">v${globals.version}</span>
-                                <span class="service-entry-version-separator">/</span>
-                                <span class="hero-version-status hero-version-status-checking" id="hero-version-status">检查中...</span>
-                            </button>
-                        </div>
-                        <h2 class="service-entry-title">LogVar 弹幕 API</h2>
-
-                        <button class="service-entry-endpoint hero-endpoint-panel" onclick="copyApiEndpoint()" type="button" aria-label="复制播放器接入地址">
-                            <span class="service-entry-endpoint-copy">
-                                <span class="service-entry-endpoint-label">播放器接入地址</span>
-                                <strong class="service-entry-endpoint-value" id="api-endpoint">加载中...</strong>
-                            </span>
-                            <span class="service-entry-copy-icon" aria-hidden="true">
+                <div class="home-entry-strip" aria-label="LogVar 弹幕 API">
+                    <div class="home-entry-main">
+                        <span class="home-entry-logo" aria-hidden="true">LV</span>
+                        <h2 class="home-entry-title">LogVar 弹幕 API</h2>
+                        <div class="home-entry-inline-status" id="system-status-card">
+                            <span class="stat-icon-wrapper stat-icon-status" id="status-icon-wrapper" aria-hidden="true">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path d="M8 16H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2"/>
-                                    <rect x="8" y="8" width="12" height="12" rx="2"/>
+                                    <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
                                 </svg>
                             </span>
-                        </button>
-                    </div>
-
-                    <div class="service-entry-right">
-                        <div class="service-entry-signal-grid" aria-label="当前服务信号">
-                            <div class="entry-signal-card" id="system-status-card">
-                                <span class="stat-icon-wrapper stat-icon-status" id="status-icon-wrapper">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
-                                    </svg>
-                                </span>
-                                <span class="entry-signal-copy">
-                                    <small>服务状态</small>
-                                    <strong class="stat-value stat-value-status" id="system-status">检测中...</strong>
-                                </span>
-                            </div>
-                            <div class="entry-signal-card">
-                                <span class="stat-icon-wrapper stat-icon-mode mode-preview" id="mode-icon-wrapper">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                        <path d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0z"/>
-                                        <path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
-                                    </svg>
-                                </span>
-                                <span class="entry-signal-copy">
-                                    <small>当前访问</small>
-                                    <strong class="hero-mode-value" id="current-mode">检测中...</strong>
-                                </span>
-                            </div>
-                            <div class="entry-signal-card compact">
-                                <span class="entry-signal-copy">
-                                    <small>可用设置</small>
-                                    <strong><span class="stat-value" id="total-configs">-</span><em>项</em></strong>
-                                </span>
-                            </div>
-                            <div class="entry-signal-card compact">
-                                <span class="entry-signal-copy">
-                                    <small>已完成</small>
-                                    <strong><span class="stat-value" id="manual-configs">-</span><em>项</em></strong>
-                                </span>
-                            </div>
+                            <strong class="stat-value stat-value-status" id="system-status">检测中...</strong>
                         </div>
                     </div>
+
+                    <button class="home-entry-version" id="hero-version-panel" onclick="showUpdateGuide()" type="button" title="查看版本信息">
+                        <span class="hero-version-status hero-version-status-checking" id="hero-version-status">v${globals.version}</span>
+                    </button>
+
+                    <button class="home-entry-endpoint" onclick="copyApiEndpoint()" type="button" aria-label="复制播放器接入地址">
+                        <span class="home-entry-endpoint-label">地址</span>
+                        <strong class="home-entry-endpoint-value" id="api-endpoint">加载中...</strong>
+                        <span class="home-entry-copy-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M8 16H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2"/>
+                                <rect x="8" y="8" width="12" height="12" rx="2"/>
+                            </svg>
+                        </span>
+                    </button>
+
+                    <span class="home-entry-hidden-metrics" aria-hidden="true">
+                        <span class="stat-icon-wrapper stat-icon-mode mode-preview" id="mode-icon-wrapper">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0z"/>
+                                <path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                            </svg>
+                        </span>
+                        <strong class="hero-mode-value" id="current-mode">检测中...</strong>
+                        <span id="total-configs">-</span>
+                        <span id="manual-configs">-</span>
+                    </span>
                 </div>
                 <div class="preview-grid" id="preview-area"></div>
             </section>
