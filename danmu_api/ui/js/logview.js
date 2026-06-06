@@ -10,6 +10,181 @@ let logSearchKeyword = '';
 let isLogAutoScrollEnabled = true;
 let isLogWrapEnabled = true;
 
+let currentLogCategoryFilter = 'all';
+
+/* ========================================
+   日志业务分类（上游日志分类系统的 fork 适配版）
+   ======================================== */
+const LOG_CATEGORY_GROUPS = [
+    ['system', 'ai'],
+    ['utils', 'cache', 'merge'],
+    ['360kan', 'aiyifan', 'animeko', 'bahamut', 'bilibili', 'custom', 'dandan', 'douban', 'ezdmw', 'hanjutv', 'iqiyi', 'leshi', 'maiduidui', 'mango', 'migu', 'other', 'renren', 'sohu', 'tencent', 'tmdb', 'vod', 'xigua', 'youku'],
+    ['forward']
+];
+const LOG_CATEGORY_ORDER = {};
+LOG_CATEGORY_GROUPS.forEach((group, groupIndex) => {
+    group.forEach((tag, tagIndex) => {
+        LOG_CATEGORY_ORDER[tag] = groupIndex * 1000 + tagIndex;
+    });
+});
+
+function normalizeLogCategoryTag(tag) {
+    let category = String(tag || '').trim().toLowerCase();
+    const normalizationMap = {
+        '360': '360kan',
+        'imgo': 'mango',
+        'qq': 'tencent',
+        'qiyi': 'iqiyi',
+        'vod fastest mode': 'vod',
+        'custom source': 'custom',
+        'bilibili-proxy': 'bilibili',
+        'tmdb-source': 'tmdb',
+        'path check': 'system',
+        'path fix': 'system',
+        'base': 'system',
+        'server': 'system',
+        'security': 'system',
+        'reqrecords': 'system',
+        'logvar-api': 'system',
+        'fongmi': 'system',
+        'http': 'utils',
+        'rate limit': 'utils',
+        'ip blacklist': 'utils',
+        'localredis': 'cache',
+        'redis': 'cache'
+    };
+    return normalizationMap[category] || category;
+}
+
+function isIgnorableLogTag(tag) {
+    const value = String(tag || '').trim();
+    return /^\\d{4}-\\d{2}-\\d{2}[T ]/.test(value) ||
+        /^\\d{2}:\\d{2}(:\\d{2})?$/.test(value) ||
+        value.includes('08:00') ||
+        value === '请求模拟' ||
+        value === '网络请求' ||
+        value === '流式请求';
+}
+
+function getLogCategory(message) {
+    const text = String(message ?? '');
+    const prefixMatch = text.match(/^(?:\\s*\\[[^\\]]+\\])+/);
+    if (!prefixMatch) return '_inherit_';
+
+    const tagMatches = prefixMatch[0].match(/\\[([^\\]]+)\\]/g) || [];
+    const tags = tagMatches.map(tag => tag.replace(/[\\[\\]]/g, '').trim()).filter(Boolean);
+    if (tags.length === 0) return '_inherit_';
+
+    if (tags.some(tag => {
+        const lower = tag.toLowerCase();
+        return lower === 'merge' || ['匹配', '落单', '补全', '合集', '略过', 'merge-check'].some(keyword => lower.includes(String(keyword).toLowerCase()));
+    })) {
+        return 'merge';
+    }
+
+    const validTags = tags.filter(tag => !isIgnorableLogTag(tag));
+    if (validTags.length === 0) return '_inherit_';
+
+    return normalizeLogCategoryTag(validTags[0]);
+}
+
+function getLogsWithCategories(logItems = logs) {
+    let lastCategory = 'system';
+    return logItems.map(log => {
+        let category = getLogCategory(log.message);
+        if (category === '_inherit_') {
+            category = lastCategory;
+        } else {
+            lastCategory = category;
+        }
+        return { ...log, category };
+    });
+}
+
+function getLogCategoriesFromLogs(logItems = logs) {
+    const categories = new Set();
+    getLogsWithCategories(logItems).forEach(log => {
+        if (log.category) categories.add(log.category);
+    });
+    return [...categories].sort((a, b) => {
+        const orderA = LOG_CATEGORY_ORDER[a] ?? 99999;
+        const orderB = LOG_CATEGORY_ORDER[b] ?? 99999;
+        return orderA !== orderB ? orderA - orderB : a.localeCompare(b);
+    });
+}
+
+function getLogCategoryText(category) {
+    const labels = {
+        all: '全部分类',
+        system: '系统',
+        ai: 'AI',
+        utils: '工具',
+        cache: '缓存',
+        merge: '合并',
+        forward: '插件'
+    };
+    return labels[category] || category;
+}
+
+function setLogCategoryFilter(category) {
+    currentLogCategoryFilter = category || 'all';
+    if (typeof document !== 'undefined') {
+        document.querySelectorAll('.log-category-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.category === currentLogCategoryFilter);
+        });
+        renderLogs();
+    }
+}
+
+function ensureLogCategoryFilterEvents(container) {
+    if (!container || container.dataset.boundCategoryEvents === 'true') return;
+    container.dataset.boundCategoryEvents = 'true';
+    container.addEventListener('click', event => {
+        const btn = event.target.closest('.log-category-btn');
+        if (!btn || !container.contains(btn)) return;
+        setLogCategoryFilter(btn.dataset.category || 'all');
+    });
+}
+
+function updateLogCategoryFilters() {
+    if (typeof document === 'undefined') return;
+    const container = document.getElementById('log-category-filters');
+    if (!container) return;
+
+    const categories = getLogCategoriesFromLogs();
+    if (currentLogCategoryFilter !== 'all' && !categories.includes(currentLogCategoryFilter)) {
+        currentLogCategoryFilter = 'all';
+    }
+    const counts = getLogsWithCategories().reduce((acc, log) => {
+        acc[log.category] = (acc[log.category] || 0) + 1;
+        return acc;
+    }, {});
+
+    let html = '<button class="log-category-btn ' + (currentLogCategoryFilter === 'all' ? 'active' : '') + '" data-category="all" type="button">' +
+        '<span class="category-text">全部分类</span>' +
+        '<span class="category-badge">' + logs.length + '</span>' +
+        '</button>';
+
+    categories.forEach(category => {
+        html += '<button class="log-category-btn ' + (currentLogCategoryFilter === category ? 'active' : '') + '" data-category="' + escapeLogAttr(category) + '" type="button">' +
+            '<span class="category-text">' + escapeLogText(getLogCategoryText(category)) + '</span>' +
+            '<span class="category-badge">' + (counts[category] || 0) + '</span>' +
+            '</button>';
+    });
+
+    container.innerHTML = html;
+    ensureLogCategoryFilterEvents(container);
+}
+
+function highlightLogTags(html) {
+    return html.replace(/(\\[[^\\]\\n]+\\])/g, '<span class="log-tag">$1</span>');
+}
+
+function formatLogMessageHtml(message, keyword) {
+    const highlighted = highlightLogMatch(formatLogMessageForDisplay(message), keyword);
+    return highlightLogTags(highlighted);
+}
+
 /* ========================================
    统一时间格式化（支持完整时间戳/简短时间）
    ======================================== */
@@ -66,6 +241,12 @@ function escapeLogText(text) {
         .replace(/>/g, '&gt;');
 }
 
+function escapeLogAttr(text) {
+    return escapeLogText(text)
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 /* ========================================
    日志搜索命中高亮
    ======================================== */
@@ -112,13 +293,16 @@ function parseLogLine(line) {
 function getFilteredLogs() {
     const keyword = logSearchKeyword.trim().toLowerCase();
 
-    return logs.filter(log => {
+    return getLogsWithCategories().filter(log => {
         const typeMatched = currentLogFilter === 'all' || log.type === currentLogFilter;
         if (!typeMatched) return false;
 
+        const categoryMatched = currentLogCategoryFilter === 'all' || log.category === currentLogCategoryFilter;
+        if (!categoryMatched) return false;
+
         if (!keyword) return true;
 
-        const haystack = [log.timestamp, getLogTypeText(log.type), log.message].join(' ').toLowerCase();
+        const haystack = [log.timestamp, getLogTypeText(log.type), log.category, log.message].join(' ').toLowerCase();
         return haystack.includes(keyword);
     });
 }
@@ -166,6 +350,7 @@ function formatLogMessageForPlainText(message) {
    渲染日志（终端文本流）
    ======================================== */
 function renderLogs() {
+    if (typeof document === 'undefined') return;
     const container = document.getElementById('log-container');
     if (!container) return;
 
@@ -177,7 +362,7 @@ function renderLogs() {
                 <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                     <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" stroke-width="2"/>
                 </svg>
-                <p class="empty-text">\${currentLogFilter === 'all' ? '暂无日志' : '暂无' + getLogTypeText(currentLogFilter) + '日志'}</p>
+                <p class="empty-text">\${currentLogFilter === 'all' && currentLogCategoryFilter === 'all' ? '暂无日志' : '暂无符合筛选条件的日志'}</p>
             </div>
         \`;
         updateLogToolbarStatus(filteredLogs.length, logs.length);
@@ -188,12 +373,12 @@ function renderLogs() {
     container.innerHTML = filteredLogs.map(log => {
         const level = normalizeLogType(log.type);
         const levelLabel = getLogTypeText(level).toUpperCase();
-        const displayMessage = formatLogMessageForDisplay(log.message);
+        const displayMessage = formatLogMessageHtml(log.message, keyword);
 
-        return '<div class="log-line log-line-' + level + '">' +
+        return '<div class="log-line log-line-' + level + '" data-category="' + escapeLogAttr(log.category || 'system') + '">' +
             '<span class="log-line-time">[' + escapeLogText(log.timestamp) + ']</span>' +
             '<span class="log-line-level">' + escapeLogText(levelLabel) + '</span>' +
-            '<span class="log-line-text">' + highlightLogMatch(displayMessage, keyword) + '</span>' +
+            '<span class="log-line-text">' + displayMessage + '</span>' +
             '</div>';
     }).join('');
 
@@ -228,6 +413,7 @@ function setLogFilter(filter) {
     });
 
     renderLogs();
+    updateLogFilterBadges();
 }
 
 /* ========================================
@@ -251,6 +437,7 @@ function updateLogFilterBadges() {
     });
 
     updateLogToolbarStatus(getFilteredLogs().length, logs.length);
+    updateLogCategoryFilters();
 }
 
 /* ========================================

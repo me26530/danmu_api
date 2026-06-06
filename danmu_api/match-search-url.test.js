@@ -13,6 +13,18 @@ test('buildMatchSearchUrl should preserve special characters and not leak match 
   assert.equal(searchUrl.searchParams.has('other'), false);
 });
 
+test('buildMatchSearchUrl should preserve ampersands with season and episode context', () => {
+  const matchUrl = new URL('https://example.test/api/v2/match?debug=1&other=ignored');
+  const searchUrl = buildMatchSearchUrl(matchUrl, 'Love & Death', 1, 2);
+
+  assert.equal(searchUrl.pathname, '/api/v2/search/anime');
+  assert.equal(searchUrl.searchParams.get('keyword'), 'Love & Death');
+  assert.equal(searchUrl.searchParams.get('season'), '1');
+  assert.equal(searchUrl.searchParams.get('episode'), '2');
+  assert.equal(searchUrl.searchParams.has(' Death'), false);
+  assert.equal(searchUrl.searchParams.has('debug'), false);
+});
+
 test('buildMatchSearchUrl should append valid season context only when present', () => {
   const matchUrl = new URL('https://example.test/api/v2/match?debug=1');
 

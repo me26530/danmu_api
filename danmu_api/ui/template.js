@@ -412,6 +412,14 @@ export const HTML_TEMPLATE = /* html */ `
                     </button>
                 </div>
 
+                <!-- 日志业务分类过滤器 -->
+                <div class="log-category-filters" id="log-category-filters" aria-label="日志业务分类过滤器">
+                    <button class="log-category-btn active" data-category="all" onclick="setLogCategoryFilter('all')" type="button">
+                        <span class="category-text">全部分类</span>
+                        <span class="category-badge">0</span>
+                    </button>
+                </div>
+
                 <div class="log-toolbar">
                     <div class="log-search-group">
                         <svg class="log-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -422,7 +430,7 @@ export const HTML_TEMPLATE = /* html */ `
                             type="text"
                             class="log-search-input"
                             id="log-search-input"
-                            placeholder="搜索日志关键字（支持时间/级别/文本）"
+                            placeholder="搜索日志关键字（支持时间/级别/分类/文本）"
                             oninput="setLogSearch(this.value)"
                         >
                         <button class="log-search-clear" id="log-search-clear" onclick="clearLogSearch()" type="button" style="display: none;">清空</button>

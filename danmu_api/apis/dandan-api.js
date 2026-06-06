@@ -1,5 +1,6 @@
 import { globals } from '../configs/globals.js';
 import { getPageTitle, jsonResponse, httpGet } from '../utils/http-util.js';
+import { runWithSourceLogContext } from '../utils/log-context-util.js';
 import { log } from '../utils/log-util.js'
 import { simplized } from '../utils/zh-util.js';
 import { setRedisKey, updateRedisCaches } from "../utils/redis-util.js";
@@ -144,32 +145,34 @@ async function resolveUrlDuration(url) {
     }
 
     if (targetUrl.includes('.qq.com')) {
-      segmentResult = await tencentSource.getComments(targetUrl, 'qq', true);
+      segmentResult = await runWithSourceLogContext('tencent', () => tencentSource.getComments(targetUrl, 'qq', true));
     } else if (targetUrl.includes('.iqiyi.com')) {
-      segmentResult = await iqiyiSource.getComments(targetUrl, 'qiyi', true);
+      segmentResult = await runWithSourceLogContext('iqiyi', () => iqiyiSource.getComments(targetUrl, 'qiyi', true));
     } else if (targetUrl.includes('.mgtv.com')) {
-      segmentResult = await mangoSource.getComments(targetUrl, 'imgo', true);
+      segmentResult = await runWithSourceLogContext('imgo', () => mangoSource.getComments(targetUrl, 'imgo', true));
     } else if (targetUrl.includes('.bilibili.com') || targetUrl.includes('b23.tv')) {
-      if (targetUrl.includes('b23.tv')) {
-        targetUrl = await bilibiliSource.resolveB23Link(targetUrl);
-      }
-      segmentResult = await bilibiliSource.getComments(targetUrl, 'bilibili1', true);
+      segmentResult = await runWithSourceLogContext('bilibili', async () => {
+        if (targetUrl.includes('b23.tv')) {
+          targetUrl = await bilibiliSource.resolveB23Link(targetUrl);
+        }
+        return bilibiliSource.getComments(targetUrl, 'bilibili1', true);
+      });
     } else if (targetUrl.includes('.youku.com')) {
-      segmentResult = await youkuSource.getComments(targetUrl, 'youku', true);
+      segmentResult = await runWithSourceLogContext('youku', () => youkuSource.getComments(targetUrl, 'youku', true));
     } else if (targetUrl.includes('.miguvideo.com')) {
-      segmentResult = await miguSource.getComments(targetUrl, 'migu', true);
+      segmentResult = await runWithSourceLogContext('migu', () => miguSource.getComments(targetUrl, 'migu', true));
     } else if (targetUrl.includes('.sohu.com')) {
-      segmentResult = await sohuSource.getComments(targetUrl, 'sohu', true);
+      segmentResult = await runWithSourceLogContext('sohu', () => sohuSource.getComments(targetUrl, 'sohu', true));
     } else if (targetUrl.includes('.le.com')) {
-      segmentResult = await leshiSource.getComments(targetUrl, 'leshi', true);
+      segmentResult = await runWithSourceLogContext('leshi', () => leshiSource.getComments(targetUrl, 'leshi', true));
     } else if (targetUrl.includes('.douyin.com') || targetUrl.includes('.ixigua.com')) {
-      segmentResult = await xiguaSource.getComments(targetUrl, 'xigua', true);
+      segmentResult = await runWithSourceLogContext('xigua', () => xiguaSource.getComments(targetUrl, 'xigua', true));
     } else if (targetUrl.includes('.mddcloud.com.cn')) {
-      segmentResult = await maiduiduiSource.getComments(targetUrl, 'maiduidui', true);
+      segmentResult = await runWithSourceLogContext('maiduidui', () => maiduiduiSource.getComments(targetUrl, 'maiduidui', true));
     } else if (targetUrl.includes('.yfsp.tv')) {
-      segmentResult = await aiyifanSource.getComments(targetUrl, 'aiyifan', true);
+      segmentResult = await runWithSourceLogContext('aiyifan', () => aiyifanSource.getComments(targetUrl, 'aiyifan', true));
     } else if (/^https?:\/\//i.test(targetUrl)) {
-      const response = await getCommentByUrl(targetUrl, 'json', true);
+      const response = await runWithSourceLogContext('other', () => getCommentByUrl(targetUrl, 'json', true));
       if (!response?.ok) return 0;
       segmentResult = await response.json();
     } else {
@@ -1336,7 +1339,7 @@ function buildEpisodesFromAnimeLinks(anime) {
 
   if (globals.enableAnimeEpisodeFilter) {
     episodesList = episodesList.filter(ep => !globals.episodeTitleFilter.test(ep.episodeTitle));
-    log("info", `[getBangumi] Episode filter enabled. Filtered episodes: ${episodesList.length}/${anime.links.length}`);
+    log("info", `[system] [getBangumi] Episode filter enabled. Filtered episodes: ${episodesList.length}/${anime.links.length}`);
     episodesList = episodesList.map((ep, index) => ({
       ...ep,
       episodeNumber: `${index + 1}`
@@ -1352,7 +1355,7 @@ function buildBangumiData(anime, idParam = "") {
 
   const episodesList = buildEpisodesFromAnimeLinks(anime);
   if (episodesList.length === 0) {
-    log("warn", `[getBangumi] No valid episodes after filtering for anime ID ${targetId}`);
+    log("warn", `[system] [getBangumi] No valid episodes after filtering for anime ID ${targetId}`);
     return {
       errorCode: 404,
       success: false,
@@ -1449,7 +1452,7 @@ export async function collectSearchEpisodesResults(searchAnimes, url, requestAni
         }
       }
     } catch (error) {
-      log("warn", `[searchEpisodes] Failed to materialize ${animeItem?.animeTitle || animeItem?.bangumiId || animeItem?.animeId}: ${error.message}`);
+      log("warn", `[system] [Episodes] Failed to materialize ${animeItem?.animeTitle || animeItem?.bangumiId || animeItem?.animeId}: ${error.message}`);
     }
 
     return null;
@@ -1592,41 +1595,43 @@ async function handleSearchSourceResults(resultData, queryTitle, targetAnimesLis
   // (globals.animes / episodeIds / episodeNum)。源内详情请求可以并发，但跨源提交并发会导致缓存顺序、ID 和裁剪行为不稳定。
   for (const key of globals.sourceOrderArr) {
     try {
-      if (lazySearch && isGenericLazySourceSupported(key)) {
-        targetAnimesList.push(...buildLazyGenericSourceSearchSummaries(key, resultData[key], queryTitle, sourceHandleOptions.querySeason));
-        continue;
-      }
+      await runWithSourceLogContext(key, async () => {
+        if (lazySearch && isGenericLazySourceSupported(key)) {
+          targetAnimesList.push(...buildLazyGenericSourceSearchSummaries(key, resultData[key], queryTitle, sourceHandleOptions.querySeason));
+          return;
+        }
 
-      if (key === 'vod') {
-        const animesVodResults = resultData[key];
-        const duplicateVodIds = lazySearch ? collectDuplicateVodCandidateIds(animesVodResults) : new Set();
-        if (animesVodResults && Array.isArray(animesVodResults)) {
-          for (const vodResult of animesVodResults) {
-            if (vodResult && vodResult.list && vodResult.list.length > 0) {
-              if (lazySearch) {
-                targetAnimesList.push(...buildLazyVodSearchSummaries(vodResult.list, queryTitle, sourceHandleOptions.querySeason, vodResult.serverName, duplicateVodIds));
-              } else {
-                await vodSource.handleAnimes(vodResult.list, queryTitle, targetAnimesList, vodResult.serverName, sourceHandleOptions);
+        if (key === 'vod') {
+          const animesVodResults = resultData[key];
+          const duplicateVodIds = lazySearch ? collectDuplicateVodCandidateIds(animesVodResults) : new Set();
+          if (animesVodResults && Array.isArray(animesVodResults)) {
+            for (const vodResult of animesVodResults) {
+              if (vodResult && vodResult.list && vodResult.list.length > 0) {
+                if (lazySearch) {
+                  targetAnimesList.push(...buildLazyVodSearchSummaries(vodResult.list, queryTitle, sourceHandleOptions.querySeason, vodResult.serverName, duplicateVodIds));
+                } else {
+                  await vodSource.handleAnimes(vodResult.list, queryTitle, targetAnimesList, vodResult.serverName, sourceHandleOptions);
+                }
               }
             }
           }
-        }
-      } else if (key === 'dandan') {
-        const animesDandan = resultData[key];
-        if (lazySearch) {
-          targetAnimesList.push(...buildLazyDandanSearchSummaries(animesDandan, queryTitle, sourceHandleOptions.querySeason));
+        } else if (key === 'dandan') {
+          const animesDandan = resultData[key];
+          if (lazySearch) {
+            targetAnimesList.push(...buildLazyDandanSearchSummaries(animesDandan, queryTitle, sourceHandleOptions.querySeason));
+          } else {
+            await dandanSource.handleAnimes(animesDandan, queryTitle, targetAnimesList, sourceHandleOptions);
+          }
         } else {
-          await dandanSource.handleAnimes(animesDandan, queryTitle, targetAnimesList, sourceHandleOptions);
+          const source = resolveSourceInstance(key);
+          if (source && typeof source.handleAnimes === 'function') {
+            await source.handleAnimes(resultData[key], queryTitle, targetAnimesList, sourceHandleOptions);
+          }
         }
-      } else {
-        const source = resolveSourceInstance(key);
-        if (source && typeof source.handleAnimes === 'function') {
-          await source.handleAnimes(resultData[key], queryTitle, targetAnimesList, sourceHandleOptions);
-        }
-      }
+      });
     } catch (sourceError) {
       const reason = sourceError?.message || String(sourceError || "unknown error");
-      log("warn", `[searchAnime] 源 ${key} 结果处理失败: ${reason}`);
+      log("warn", `[system] [system] [searchAnime] 源 ${key} 结果处理失败: ${reason}`);
     }
   }
 }
@@ -1684,7 +1689,7 @@ export async function searchAnime(url, preferAnimeId = null, preferSource = null
   const requestAnimeDetailsMap = detailStore instanceof Map ? detailStore : new Map();
   let lazySearch = options?.lazySearch === true;
   if (lazySearch && !isPositiveSearchCacheWindow()) {
-    log("info", `[searchAnime] SEARCH_CACHE_MINUTES<=0，禁用公共懒搜索以避免返回不可物化的摘要`);
+    log("info", `[system] [searchAnime] SEARCH_CACHE_MINUTES<=0，禁用公共懒搜索以避免返回不可物化的摘要`);
     lazySearch = false;
   }
   const sourceHandleOptions = {
@@ -1722,7 +1727,7 @@ export async function searchAnime(url, preferAnimeId = null, preferSource = null
     if (lazySearch) {
       rehydrateLazyDescriptorsFromSearchCache(cacheKeyUsed);
       if (!areLazyResultsMaterializable(cachedResults)) {
-        log("warn", `[searchAnime] 懒搜索缓存 ${cacheKeyUsed} 缺少可物化 descriptor，忽略缓存并重新搜索`);
+        log("warn", `[system] [searchAnime] 懒搜索缓存 ${cacheKeyUsed} 缺少可物化 descriptor，忽略缓存并重新搜索`);
         cachedResults = null;
         cacheHit = false;
       }
@@ -1738,7 +1743,7 @@ export async function searchAnime(url, preferAnimeId = null, preferSource = null
           animes: cachedResults,
         });
       }
-      log("info", `[searchAnime] 缓存候选未满足目标集数 S${querySeason}E${queryEpisode}，继续搜索/扩展后续季度`);
+      log("info", `[system] [searchAnime] 缓存候选未满足目标集数 S${querySeason}E${queryEpisode}，继续搜索/扩展后续季度`);
       if (!lazySearch && options?.allowUnseasonedCacheFallback && Array.isArray(cachedResults)) {
         fallbackCacheSeed = cachedResults;
       }
@@ -1824,7 +1829,7 @@ export async function searchAnime(url, preferAnimeId = null, preferSource = null
   try {
     // 根据 sourceOrderArr 动态构建请求数组
     log("info", "Search sourceOrderArr:", globals.sourceOrderArr);
-    const requestPromises = globals.sourceOrderArr.map(source => {
+    const requestPromises = globals.sourceOrderArr.map(source => runWithSourceLogContext(source, async () => {
       if (source === "360") return kan360Source.search(queryTitle);
       if (source === "vod") return vodSource.search(queryTitle, preferAnimeId, preferSource);
       if (source === "tmdb") return tmdbSource.search(queryTitle);
@@ -1848,7 +1853,8 @@ export async function searchAnime(url, preferAnimeId = null, preferSource = null
       if (source === "aiyifan") return aiyifanSource.search(queryTitle);
       if (source === "animeko") return animekoSource.search(queryTitle);
       if (source === "ezdmw") return ezdmwSource.search(queryTitle);
-    });
+      return [];
+    }));
 
     // 执行所有请求并等待结果（单源失败不影响其它源）
     const settledResults = await Promise.allSettled(requestPromises);
@@ -1856,7 +1862,7 @@ export async function searchAnime(url, preferAnimeId = null, preferSource = null
       if (result.status === "fulfilled") return result.value;
       const source = globals.sourceOrderArr[index];
       const reason = result.reason?.message || String(result.reason || "unknown error");
-      log("warn", `[searchAnime] 源 ${source} 搜索失败: ${reason}`);
+      log("warn", `[system] [searchAnime] 源 ${source} 搜索失败: ${reason}`);
       return [];
     });
 
@@ -1918,7 +1924,7 @@ export async function searchAnime(url, preferAnimeId = null, preferSource = null
       // 首先检查剧名是否包含过滤关键词
       const animeTitle = anime.animeTitle || '';
       if (globals.animeTitleFilter && globals.animeTitleFilter.test(animeTitle)) {
-        log("info", `[searchAnime] Anime ${anime.animeId} filtered by name: ${animeTitle}`);
+        log("info", `[system] [searchAnime] Anime ${anime.animeId} filtered by name: ${animeTitle}`);
         continue; // 跳过该动漫
       }
 
@@ -1937,7 +1943,7 @@ export async function searchAnime(url, preferAnimeId = null, preferSource = null
           return !globals.episodeTitleFilter.test(episode.episodeTitle);
         });
 
-        log("info", `[searchAnime] Anime ${anime.animeId} filtered episodes: ${episodesList.length}/${animeData.links.length}`);
+        log("info", `[system] [searchAnime] Anime ${anime.animeId} filtered episodes: ${episodesList.length}/${animeData.links.length}`);
 
         // 只有当过滤后还有有效剧集时才保留该动漫
         if (episodesList.length > 0) {
@@ -2268,7 +2274,7 @@ function getBangumiDataForMatch(anime, detailStore = null) {
     resolveAnimeByIdFromDetailStore(anime?.animeId, detailStore, anime?.source);
 
   if (!detailAnime) {
-    log("warn", `[matchAnime] Missing request detail snapshot for anime ${anime?.animeId ?? anime?.bangumiId}`);
+    log("warn", `[system] [matchAnime] Missing request detail snapshot for anime ${anime?.animeId ?? anime?.bangumiId}`);
     return null;
   }
 
@@ -2333,7 +2339,7 @@ function findCrossSeasonEpisodeMap(searchData, title, year, season, episode, pla
   for (const entry of seasonEntries) {
     const absolute = entry.episodes.find(item => extractEpisodeNumberFromTitle(item.episodeTitle) === episode);
     if (absolute) {
-      log("info", `[CrossSeason] 通过绝对集数命中 S${entry.season}: ${absolute.episodeTitle}`);
+      log("info", `[system] [Spillover] 通过绝对集数命中 S${entry.season}: ${absolute.episodeTitle}`);
       return { resEpisode: absolute, resAnime: entry.anime };
     }
   }
@@ -2343,7 +2349,7 @@ function findCrossSeasonEpisodeMap(searchData, title, year, season, episode, pla
     if (remaining <= entry.episodes.length) {
       const mappedEpisode = entry.episodes[remaining - 1];
       if (mappedEpisode) {
-        log("info", `[CrossSeason] S${season}E${episode} 顺延映射到 S${entry.season}E${remaining}: ${mappedEpisode.episodeTitle}`);
+        log("info", `[system] [Spillover] S${season}E${episode} 顺延映射到 S${entry.season}E${remaining}: ${mappedEpisode.episodeTitle}`);
         return { resEpisode: mappedEpisode, resAnime: entry.anime };
       }
     }
@@ -2440,14 +2446,14 @@ async function matchAniAndEp(season, episode, year, searchData, title, req, plat
 
     const bangumiData = getBangumiDataForMatch(anime, detailStore);
     if (!bangumiData?.success || !Array.isArray(bangumiData?.bangumi?.episodes) || bangumiData.bangumi.episodes.length === 0) {
-      log("warn", `[matchAniAndEp] 跳过无效 bangumi: ${anime.bangumiId || anime.animeId} / ${anime.animeTitle}`);
+      log("warn", `[system] [Match] 跳过无效 bangumi: ${anime.bangumiId || anime.animeId} / ${anime.animeTitle}`);
       if (candidateTrace) attemptTrace.candidates.push({ ...candidateTrace, reasonCode: 'detail_missing' });
       continue;
     }
     const bangumiEpisodes = bangumiData.bangumi.episodes;
 
     log("info", "判断剧集", `Anime: ${anime.animeTitle}`);
-    log("debug", "[matchAniAndEp] bangumi摘要", {
+    log("debug", "[system] [Match] bangumi摘要", {
       animeId: anime.animeId,
       bangumiId: anime.bangumiId,
       episodeCount: bangumiEpisodes.length
@@ -2582,12 +2588,12 @@ async function fallbackMatchAniAndEp(searchData, req, season, episode, year, tit
 
     const bangumiData = getBangumiDataForMatch(anime, detailStore);
     if (!bangumiData?.success || !Array.isArray(bangumiData?.bangumi?.episodes) || bangumiData.bangumi.episodes.length === 0) {
-      log("warn", `[fallbackMatchAniAndEp] 跳过无效 bangumi: ${anime.bangumiId || anime.animeId} / ${anime.animeTitle}`);
+      log("warn", `[system] [Match] 跳过无效 bangumi: ${anime.bangumiId || anime.animeId} / ${anime.animeTitle}`);
       if (candidateTrace) attemptTrace.candidates.push({ ...candidateTrace, reasonCode: 'detail_missing' });
       continue;
     }
     const bangumiEpisodes = bangumiData.bangumi.episodes;
-    log("debug", "[fallbackMatchAniAndEp] bangumi摘要", {
+    log("debug", "[system] [Match] bangumi摘要", {
       animeId: anime.animeId,
       bangumiId: anime.bangumiId,
       episodeCount: bangumiEpisodes.length
@@ -2987,8 +2993,8 @@ export async function matchAnime(url, req, clientIp = null) {
       resEpisode = fastMatched.resEpisode;
       finalMode = 'fast_match';
       finalReasonCode = 'fast_match_cache_hit';
-      log("info", `[FastMatch] 使用偏好缓存命中: ${resAnime.animeTitle}; episode: ${resEpisode.episodeTitle}`);
-      log("info", `[AI匹配] 已跳过，原因：${getAiReasonText("fast_match_cache_hit")}`);
+      log("info", `[system] [FastMatch] 使用偏好缓存命中: ${resAnime.animeTitle}; episode: ${resEpisode.episodeTitle}`);
+      log("info", `[AI] 已跳过，原因：${getAiReasonText("fast_match_cache_hit")}`);
       debugCollector.set('search', {
         used: false,
         skippedReason: 'fast_match_cache_hit',
@@ -3009,7 +3015,7 @@ export async function matchAnime(url, req, clientIp = null) {
       });
     } else {
       const originSearchUrl = buildMatchSearchUrl(url, title, season, episode);
-      log("info", `[matchAnime] 开始搜索候选: title=${title}, season=${season || 'N/A'}`);
+      log("info", `[system] [matchAnime] 开始搜索候选: title=${title}, season=${season || 'N/A'}`);
       const searchRes = await searchAnime(
         originSearchUrl,
         preferAnimeId,
@@ -3019,7 +3025,7 @@ export async function matchAnime(url, req, clientIp = null) {
       );
       const searchData = await searchRes.json();
       const rawAnimes = Array.isArray(searchData?.animes) ? searchData.animes : [];
-      log("info", `[matchAnime] 搜索候选数量: ${rawAnimes.length}`);
+      log("info", `[system] [matchAnime] 搜索候选数量: ${rawAnimes.length}`);
 
       // 过滤失效候选，避免列表里有条目但详情索引已不存在
       const validAnimes = rawAnimes.filter(anime => {
@@ -3029,10 +3035,10 @@ export async function matchAnime(url, req, clientIp = null) {
         );
       });
       if (validAnimes.length !== rawAnimes.length) {
-        log("info", `[matchAnime] 已过滤失效候选: ${rawAnimes.length} -> ${validAnimes.length}`);
+        log("info", `[system] [matchAnime] 已过滤失效候选: ${rawAnimes.length} -> ${validAnimes.length}`);
       }
       searchData.animes = validAnimes;
-      log("info", `[matchAnime] 有效候选数量: ${searchData.animes.length}`);
+      log("info", `[system] [matchAnime] 有效候选数量: ${searchData.animes.length}`);
       debugCollector.set('search', {
         used: true,
         skippedReason: null,
@@ -3044,7 +3050,7 @@ export async function matchAnime(url, req, clientIp = null) {
       if (searchData.animes.length > 0) {
         // 尝试使用AI进行匹配
         const aiPreferredPlatform = preferredPlatform || dynamicPlatformOrder.find(Boolean) || null;
-        log("info", `[AI匹配] 开始请求：候选数=${searchData.animes.length}；偏好平台=${aiPreferredPlatform || "无"}`);
+        log("info", `[AI] 开始请求：候选数=${searchData.animes.length}；偏好平台=${aiPreferredPlatform || "无"}`);
         const aiStartTime = Date.now();
         const aiMatchResult = await matchAniAndEpByAi(season, episode, year, searchData, title, req, dynamicPlatformOrder, preferAnimeId, aiPreferredPlatform, offsets, requestAnimeDetailsMap);
         const aiLatencyMs = Date.now() - aiStartTime;
@@ -3061,7 +3067,7 @@ export async function matchAnime(url, req, clientIp = null) {
           selectedAnimeTitle: aiMatchResult.resAnime?.animeTitle ?? null,
           selectedEpisodeTitle: aiMatchResult.resEpisode?.episodeTitle ?? null
         });
-        log("info", `[AI匹配] 结果：${aiMatched ? "命中" : "未命中"}；原因：${aiReasonText}；耗时：${aiLatencyMs}ms；候选数：${searchData?.animes?.length || 0}；偏好平台：${aiPreferredPlatform || "无"}`);
+        log("info", `[AI] 结果：${aiMatched ? "命中" : "未命中"}；原因：${aiReasonText}；耗时：${aiLatencyMs}ms；候选数：${searchData?.animes?.length || 0}；偏好平台：${aiPreferredPlatform || "无"}`);
         if (aiMatched) {
           resAnime = aiMatchResult.resAnime;
           resEpisode = aiMatchResult.resEpisode;
@@ -3075,9 +3081,9 @@ export async function matchAnime(url, req, clientIp = null) {
           if (shouldSkipFallbackByAiResult(aiMatchResult)) {
             finalMode = 'ai';
             finalReasonCode = aiMatchResult.reason || 'ai_no_candidate';
-            log("info", `[AI匹配] 已启用AI结果信任，跳过常规兜底；原因：${aiReasonText}`);
+            log("info", `[AI] 已启用AI结果信任，跳过常规兜底；原因：${aiReasonText}`);
           } else {
-            log("info", `[AI匹配] 未命中，进入常规匹配流程`);
+            log("info", `[AI] 未命中，进入常规匹配流程`);
             // AI匹配失败或未配置，使用传统匹配方式
             log("info", `[常规匹配] 平台尝试顺序: ${JSON.stringify(dynamicPlatformOrder)}`);
             for (const platform of dynamicPlatformOrder) {
@@ -3126,7 +3132,7 @@ export async function matchAnime(url, req, clientIp = null) {
           selectedAnimeTitle: null,
           selectedEpisodeTitle: null
         });
-        log("info", "[matchAnime] 无可用候选，跳过 AI 与回退匹配");
+        log("info", "[system] [matchAnime] 无可用候选，跳过 AI 与回退匹配");
       }
     }
 
@@ -3431,57 +3437,59 @@ export async function getComment(path, queryFormat, segmentFlag, clientIp = null
       fetchedDanmus = await fetchMergedComments(url, { animeTitle, episodeTitle, commentId });
     } else {
       if (url.includes('.qq.com')) {
-        fetchedDanmus = await tencentSource.getComments(url, plat, segmentFlag);
+        fetchedDanmus = await runWithSourceLogContext('tencent', () => tencentSource.getComments(url, plat, segmentFlag));
       } else if (url.includes('.iqiyi.com')) {
-        fetchedDanmus = await iqiyiSource.getComments(url, plat, segmentFlag);
+        fetchedDanmus = await runWithSourceLogContext('iqiyi', () => iqiyiSource.getComments(url, plat, segmentFlag));
       } else if (url.includes('.mgtv.com')) {
-        fetchedDanmus = await mangoSource.getComments(url, plat, segmentFlag);
+        fetchedDanmus = await runWithSourceLogContext('imgo', () => mangoSource.getComments(url, plat, segmentFlag));
       } else if (url.includes('.bilibili.com') || url.includes('b23.tv')) {
-        if (url.includes('b23.tv')) {
-          url = await bilibiliSource.resolveB23Link(url);
-        }
-        fetchedDanmus = await bilibiliSource.getComments(url, plat, segmentFlag);
+        fetchedDanmus = await runWithSourceLogContext('bilibili', async () => {
+          if (url.includes('b23.tv')) {
+            url = await bilibiliSource.resolveB23Link(url);
+          }
+          return bilibiliSource.getComments(url, plat, segmentFlag);
+        });
       } else if (url.includes('.youku.com')) {
-        fetchedDanmus = await youkuSource.getComments(url, plat, segmentFlag);
+        fetchedDanmus = await runWithSourceLogContext('youku', () => youkuSource.getComments(url, plat, segmentFlag));
       } else if (url.includes('.miguvideo.com')) {
-        fetchedDanmus = await miguSource.getComments(url, plat, segmentFlag);
+        fetchedDanmus = await runWithSourceLogContext('migu', () => miguSource.getComments(url, plat, segmentFlag));
       } else if (url.includes('.sohu.com')) {
-        fetchedDanmus = await sohuSource.getComments(url, plat, segmentFlag);
+        fetchedDanmus = await runWithSourceLogContext('sohu', () => sohuSource.getComments(url, plat, segmentFlag));
       } else if (url.includes('.le.com')) {
-        fetchedDanmus = await leshiSource.getComments(url, plat, segmentFlag);
+        fetchedDanmus = await runWithSourceLogContext('leshi', () => leshiSource.getComments(url, plat, segmentFlag));
       } else if (url.includes('.douyin.com') || url.includes('.ixigua.com')) {
-        fetchedDanmus = await xiguaSource.getComments(url, plat, segmentFlag);
+        fetchedDanmus = await runWithSourceLogContext('xigua', () => xiguaSource.getComments(url, plat, segmentFlag));
       } else if (url.includes('.mddcloud.com.cn')) {
-        fetchedDanmus = await maiduiduiSource.getComments(url, plat, segmentFlag);
+        fetchedDanmus = await runWithSourceLogContext('maiduidui', () => maiduiduiSource.getComments(url, plat, segmentFlag));
       } else if (url.startsWith('acfun://')) {
-        fetchedDanmus = await acfunSource.getComments(url, plat, segmentFlag);
+        fetchedDanmus = await runWithSourceLogContext('acfun', () => acfunSource.getComments(url, plat, segmentFlag));
       } else if (url.includes('.yfsp.tv')) {
-        fetchedDanmus = await aiyifanSource.getComments(url, plat, segmentFlag);
+        fetchedDanmus = await runWithSourceLogContext('aiyifan', () => aiyifanSource.getComments(url, plat, segmentFlag));
       }
 
       const urlPattern = /^(https?:\/\/)?([\w.-]+)\.([a-z]{2,})(\/.*)?$/i;
       if (!urlPattern.test(url)) {
         if (plat === "renren") {
-          fetchedDanmus = await renrenSource.getComments(url, plat, segmentFlag);
+          fetchedDanmus = await runWithSourceLogContext('renren', () => renrenSource.getComments(url, plat, segmentFlag));
         } else if (plat === "hanjutv") {
-          fetchedDanmus = await hanjutvSource.getComments(url, plat, segmentFlag);
+          fetchedDanmus = await runWithSourceLogContext('hanjutv', () => hanjutvSource.getComments(url, plat, segmentFlag));
         } else if (plat === "bahamut") {
-          fetchedDanmus = await bahamutSource.getComments(url, plat, segmentFlag);
+          fetchedDanmus = await runWithSourceLogContext('bahamut', () => bahamutSource.getComments(url, plat, segmentFlag));
         } else if (plat === "dandan") {
-          fetchedDanmus = await dandanSource.getComments(url, plat, segmentFlag);
+          fetchedDanmus = await runWithSourceLogContext('dandan', () => dandanSource.getComments(url, plat, segmentFlag));
         } else if (plat === "custom") {
-          fetchedDanmus = await customSource.getComments(url, plat, segmentFlag);
+          fetchedDanmus = await runWithSourceLogContext('custom', () => customSource.getComments(url, plat, segmentFlag));
         } else if (plat === "acfun") {
-          fetchedDanmus = await acfunSource.getComments(url, plat, segmentFlag);
+          fetchedDanmus = await runWithSourceLogContext('acfun', () => acfunSource.getComments(url, plat, segmentFlag));
         } else if (plat === "animeko") {
-          fetchedDanmus = await animekoSource.getComments(url, plat, segmentFlag);
+          fetchedDanmus = await runWithSourceLogContext('animeko', () => animekoSource.getComments(url, plat, segmentFlag));
         } else if (plat === "ezdmw") {
-          fetchedDanmus = await ezdmwSource.getComments(url, plat, segmentFlag);
+          fetchedDanmus = await runWithSourceLogContext('ezdmw', () => ezdmwSource.getComments(url, plat, segmentFlag));
         }
       }
 
       if ((!fetchedDanmus || fetchedDanmus.length === 0) && urlPattern.test(url)) {
-        fetchedDanmus = await otherSource.getComments(url, "other_server", segmentFlag);
+        fetchedDanmus = await runWithSourceLogContext('other', () => otherSource.getComments(url, "other_server", segmentFlag));
       }
     }
 
@@ -3621,50 +3629,50 @@ export async function getCommentByUrl(videoUrl, queryFormat, segmentFlag, includ
 
     if (url.includes('.qq.com')) {
       matchedSource = 'tencent';
-      danmus = await tencentSource.getComments(url, "qq", segmentFlag);
+      danmus = await runWithSourceLogContext('tencent', () => tencentSource.getComments(url, "qq", segmentFlag));
     } else if (url.includes('.iqiyi.com')) {
       matchedSource = 'iqiyi';
-      danmus = await iqiyiSource.getComments(url, "qiyi", segmentFlag);
+      danmus = await runWithSourceLogContext('iqiyi', () => iqiyiSource.getComments(url, "qiyi", segmentFlag));
     } else if (url.includes('.mgtv.com')) {
       matchedSource = 'imgo';
-      danmus = await mangoSource.getComments(url, "imgo", segmentFlag);
+      danmus = await runWithSourceLogContext('imgo', () => mangoSource.getComments(url, "imgo", segmentFlag));
     } else if (url.includes('.bilibili.com') || url.includes('b23.tv')) {
       matchedSource = 'bilibili';
       if (url.includes('b23.tv')) {
-        resolvedUrl = await bilibiliSource.resolveB23Link(url);
+        resolvedUrl = await runWithSourceLogContext('bilibili', () => bilibiliSource.resolveB23Link(url));
         const resolvedValidation = await validateExternalUrl(resolvedUrl);
         if (!resolvedValidation.ok) {
           return resolvedValidation.response;
         }
         resolvedUrl = resolvedValidation.normalizedUrl;
       }
-      danmus = await bilibiliSource.getComments(resolvedUrl, "bilibili1", segmentFlag);
+      danmus = await runWithSourceLogContext('bilibili', () => bilibiliSource.getComments(resolvedUrl, "bilibili1", segmentFlag));
     } else if (url.includes('.youku.com')) {
       matchedSource = 'youku';
-      danmus = await youkuSource.getComments(url, "youku", segmentFlag);
+      danmus = await runWithSourceLogContext('youku', () => youkuSource.getComments(url, "youku", segmentFlag));
     } else if (url.includes('.miguvideo.com')) {
       matchedSource = 'migu';
-      danmus = await miguSource.getComments(url, "migu", segmentFlag);
+      danmus = await runWithSourceLogContext('migu', () => miguSource.getComments(url, "migu", segmentFlag));
     } else if (url.includes('.sohu.com')) {
       matchedSource = 'sohu';
-      danmus = await sohuSource.getComments(url, "sohu", segmentFlag);
+      danmus = await runWithSourceLogContext('sohu', () => sohuSource.getComments(url, "sohu", segmentFlag));
     } else if (url.includes('.le.com')) {
       matchedSource = 'leshi';
-      danmus = await leshiSource.getComments(url, "leshi", segmentFlag);
+      danmus = await runWithSourceLogContext('leshi', () => leshiSource.getComments(url, "leshi", segmentFlag));
     } else if (url.includes('.douyin.com') || url.includes('.ixigua.com')) {
       matchedSource = 'xigua';
-      danmus = await xiguaSource.getComments(url, "xigua", segmentFlag);
+      danmus = await runWithSourceLogContext('xigua', () => xiguaSource.getComments(url, "xigua", segmentFlag));
     } else if (url.includes('.mddcloud.com.cn')) {
       matchedSource = 'maiduidui';
-      danmus = await maiduiduiSource.getComments(url, "maiduidui", segmentFlag);
+      danmus = await runWithSourceLogContext('maiduidui', () => maiduiduiSource.getComments(url, "maiduidui", segmentFlag));
     } else if (url.includes('.yfsp.tv')) {
       matchedSource = 'aiyifan';
-      danmus = await aiyifanSource.getComments(url, "aiyifan", segmentFlag);
+      danmus = await runWithSourceLogContext('aiyifan', () => aiyifanSource.getComments(url, "aiyifan", segmentFlag));
     } else {
       const urlPattern = /^(https?:\/\/)?([\w.-]+)\.([a-z]{2,})(\/.*)?$/i;
       if (urlPattern.test(url)) {
         matchedSource = 'other_server';
-        danmus = await otherSource.getComments(url, "other_server", segmentFlag);
+        danmus = await runWithSourceLogContext('other', () => otherSource.getComments(url, "other_server", segmentFlag));
       }
     }
 

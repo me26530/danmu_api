@@ -108,6 +108,44 @@ export default class Kan360Source extends BaseSource {
     return null;
   }
 
+  // 使用 /v1/detail 分批获取集数（每批最多 200 集），返回 [{name, url}, ...]
+  async getEpisodesV1(cat, id, site, number) {
+    try {
+      const total = Number(number);
+      if (!Number.isFinite(total) || total <= 0) return [];
+
+      const batchSize = 200;
+      let startIdx = 1;
+      const episodes = [];
+
+      while (startIdx <= total) {
+        const endIdx = Math.min(startIdx + batchSize - 1, total);
+        try {
+          const detail = await this.get360Detail(cat, id, site, startIdx, endIdx);
+          const batchEpisodes = detail?.data?.allepidetail?.[site];
+          if (Array.isArray(batchEpisodes) && batchEpisodes.length > 0) {
+            for (const item of batchEpisodes) {
+              episodes.push({ name: item.playlink_num, url: item.url });
+            }
+          } else {
+            if (startIdx === 1) return [];
+            break;
+          }
+        } catch (error) {
+          log('error', `[360kan] getEpisodesV1 batch ${startIdx}-${endIdx} failed for site ${site}: ${error && error.message ? error.message : error}`);
+          if (startIdx === 1) return [];
+          break;
+        }
+        startIdx = endIdx + 1;
+      }
+
+      return episodes;
+    } catch (error) {
+      log('error', `[360kan] getEpisodesV1 error: ${error && error.message ? error.message : error}`);
+      return [];
+    }
+  }
+
   // 使用 episodesv2 接口获取剧集分集（电视剧/动漫）
   async getEpisodesV2(cat, entId, site) {
     try {
@@ -295,18 +333,20 @@ export default class Kan360Source extends BaseSource {
                       });
                     }
                   } else {
-                    // 回退：尝试使用 v1/detail 获取 allepidetail
+                    // 回退：使用 v1/detail 分批获取 allepidetail（每批最多 200 集）
                     try {
                       const siteNumber = await this.getNumber(cat, detailId, siteKey);
-                      const detail = await this.get360Detail(cat, detailId, siteKey, 1, siteNumber);
-                      if (detail && detail.data && detail.data.allepidetail && detail.data.allepidetail[siteKey]) {
-                        for (const ep of detail.data.allepidetail[siteKey]) {
-                          links.push({
-                            name: ep.playlink_num,
-                            url: ep.url,
-                            title: `【${siteKey}】 第${ep.playlink_num}集`,
-                            sort: ep.playlink_num
-                          });
+                      if (siteNumber && Number(siteNumber) > 0) {
+                        const episodes = await this.getEpisodesV1(cat, detailId, siteKey, siteNumber);
+                        if (episodes && episodes.length > 0) {
+                          for (const ep of episodes) {
+                            links.push({
+                              name: ep.name,
+                              url: ep.url,
+                              title: `【${siteKey}】 第${ep.name}集`,
+                              sort: ep.name
+                            });
+                          }
                         }
                       }
                     } catch (e) {

@@ -1,4 +1,5 @@
 import { globals } from '../configs/globals.js';
+import { getCurrentLogSourceName } from './log-context-util.js';
 
 // =====================
 // 路由请求相关
@@ -34,9 +35,19 @@ export function log(level, ...args) {
     }
   });
 
-  const message = processedArgs
+  let message = processedArgs
     .map((arg) => (typeof arg === "object" ? JSON.stringify(arg) : arg))
     .join(" ");
+
+  const currentLogSource = getCurrentLogSourceName();
+  if (currentLogSource && typeof message === 'string') {
+    const firstTagMatch = message.match(/^\s*\[([^\]]+)\]/);
+    const firstTag = firstTagMatch ? firstTagMatch[1].trim() : '';
+    const genericContextTags = new Set(['请求模拟', '网络请求', '流式请求']);
+    if (!firstTagMatch || genericContextTags.has(firstTag)) {
+      message = `[${currentLogSource}] ${message}`;
+    }
+  }
 
   // 获取上海时区时间(UTC+8)
   const now = new Date();
@@ -46,7 +57,7 @@ export function log(level, ...args) {
   globals.logBuffer.push({ timestamp, level: resolvedLevel, message });
   if (globals.logBuffer.length > globals.MAX_LOGS) globals.logBuffer.shift();
   const consoleFn = typeof console[resolvedLevel] === 'function' ? console[resolvedLevel] : console.log;
-  consoleFn(...processedArgs);
+  consoleFn(message);
 }
 
 // 隐藏敏感信息的辅助函数
