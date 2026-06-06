@@ -1760,10 +1760,10 @@ export const overviewCssContent = /* css */ `/* ================================
 .home-entry-strip {
     position: relative;
     display: grid;
-    grid-template-columns: minmax(220px, max-content) auto minmax(260px, 520px);
+    grid-template-columns: minmax(260px, max-content) minmax(260px, 520px);
     align-items: center;
     justify-content: space-between;
-    gap: 0.78rem;
+    gap: 0.9rem;
     margin-bottom: 0.76rem;
     padding: 0.62rem 0.66rem;
     border: 1px solid rgba(203, 213, 225, 0.86);
@@ -1776,6 +1776,21 @@ export const overviewCssContent = /* css */ `/* ================================
     display: flex;
     align-items: center;
     gap: 0.58rem;
+    min-width: 0;
+}
+
+.home-entry-heading {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.36rem;
+    min-width: 0;
+}
+
+.home-entry-title-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.44rem;
     min-width: 0;
 }
 
@@ -1810,7 +1825,7 @@ export const overviewCssContent = /* css */ `/* ================================
     display: inline-flex;
     align-items: center;
     gap: 0.34rem;
-    min-height: 28px;
+    min-height: 24px;
     border-radius: 999px;
     border: 1px solid rgba(203, 213, 225, 0.84);
     background: rgba(248, 250, 252, 0.86);
@@ -1823,8 +1838,7 @@ export const overviewCssContent = /* css */ `/* ================================
 }
 
 .home-entry-version {
-    justify-self: start;
-    padding: 0.18rem 0.5rem;
+    padding: 0.13rem 0.46rem;
     cursor: pointer;
     transition: border-color var(--transition-fast), background var(--transition-fast), transform var(--transition-fast);
 }
@@ -1986,12 +2000,11 @@ export const overviewCssContent = /* css */ `/* ================================
 
 @media (max-width: 1180px) {
     .home-entry-strip {
-        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-columns: minmax(0, 1fr);
         justify-content: stretch;
     }
 
     .home-entry-endpoint {
-        grid-column: 1 / -1;
         max-width: none;
     }
 }
@@ -2006,8 +2019,12 @@ export const overviewCssContent = /* css */ `/* ================================
     }
 
     .home-entry-main {
-        align-items: center;
+        align-items: flex-start;
+    }
+
+    .home-entry-title-row {
         flex-wrap: wrap;
+        row-gap: 0.28rem;
     }
 
     .home-entry-logo {
@@ -2018,10 +2035,6 @@ export const overviewCssContent = /* css */ `/* ================================
 
     .home-entry-title {
         font-size: 1.08rem;
-    }
-
-    .home-entry-version {
-        justify-self: start;
     }
 
     .home-entry-endpoint {
