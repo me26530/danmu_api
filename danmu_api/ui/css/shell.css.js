@@ -1513,4 +1513,49 @@ export const shellCssContent = /* css */ `/* ===================================
     border-color: rgba(248, 113, 113, 0.22);
 }
 
+/* ========================================
+   侧栏轻提示：替代原工作台大卡片，保持导航优先
+   ======================================== */
+.sidebar-mini-note {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.52rem;
+    margin-top: auto;
+    padding: 0.68rem 0.76rem;
+    border-radius: 16px;
+    border: 1px solid rgba(226, 232, 240, 0.86);
+    background: rgba(248, 250, 252, 0.72);
+    color: var(--text-secondary);
+    font-size: 0.76rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
+.sidebar-mini-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    background: #10b981;
+    box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.12);
+    flex-shrink: 0;
+}
+
+.sidebar-mini-text {
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+[data-theme="dark"] .sidebar-mini-note {
+    background: rgba(15, 23, 42, 0.64);
+    border-color: rgba(51, 65, 85, 0.88);
+    color: rgba(203, 213, 225, 0.78);
+}
+
+[data-theme="dark"] .sidebar-mini-dot {
+    background: #34d399;
+    box-shadow: 0 0 0 4px rgba(52, 211, 153, 0.12);
+}
+
 `;

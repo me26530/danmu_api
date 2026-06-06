@@ -436,15 +436,13 @@ async function refreshSidebarSnapshot() {
         accessMode: resolveCurrentAccessMode()
     });
 
-    const configPromise = fetchUiConfig();
-
-    await Promise.allSettled([
-        refreshRuntimeSummary(),
-        configPromise.then(function(config) {
-            updateDeployEnvStatusBadgeFromConfig(config);
-            return refreshSidebarConfiguredCount(config);
-        })
-    ]);
+    try {
+        const config = await fetchUiConfig();
+        updateDeployEnvStatusBadgeFromConfig(config);
+        refreshSidebarConfiguredCount(config);
+    } catch (error) {
+        console.error('刷新侧栏状态失败:', error);
+    }
 }
 
 function startSidebarRefreshLoop() {

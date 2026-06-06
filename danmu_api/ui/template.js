@@ -83,44 +83,10 @@ export const HTML_TEMPLATE = /* html */ `
             </div>
 
             <div class="sidebar-surface">
-                <section class="sidebar-info-card" aria-label="服务状态总览">
-                    <div class="sidebar-info-copy">
-                        <div class="sidebar-info-head">
-                            <h2 class="sidebar-info-title">弹幕服务工作台</h2>
-                            <span class="sidebar-info-runtime" id="sidebar-info-runtime" data-state="checking">运行时检测中</span>
-                        </div>
-                        <p class="sidebar-info-subtitle" id="sidebar-info-status">正在同步服务状态与版本信息</p>
-                    </div>
-                    <div class="sidebar-info-chip-grid">
-                        <div class="sidebar-info-chip">
-                            <span class="sidebar-info-chip-label">版本</span>
-                            <strong class="sidebar-info-chip-value" id="sidebar-info-version">版本检测中</strong>
-                        </div>
-                        <div class="sidebar-info-chip">
-                            <span class="sidebar-info-chip-label">访问</span>
-                            <strong class="sidebar-info-chip-value" id="sidebar-info-mode">公开访问</strong>
-                        </div>
-                        <div class="sidebar-info-chip">
-                            <span class="sidebar-info-chip-label">CPU</span>
-                            <strong class="sidebar-info-chip-value" id="sidebar-info-cpu">--</strong>
-                        </div>
-                        <div class="sidebar-info-chip">
-                            <span class="sidebar-info-chip-label">内存</span>
-                            <strong class="sidebar-info-chip-value" id="sidebar-info-memory">--</strong>
-                        </div>
-                    </div>
-                    <button class="sidebar-info-detail" onclick="showUpdateGuide()" type="button" aria-label="查看运行状态与版本详情">
-                        <span class="sidebar-info-detail-copy">
-                            <span class="sidebar-info-detail-label">查看详情</span>
-                            <strong class="sidebar-info-detail-value">运行状态与版本</strong>
-                        </span>
-                        <span class="sidebar-info-detail-icon" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                                <path d="M9 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round"/>
-                            </svg>
-                        </span>
-                    </button>
-                </section>
+                <div class="sidebar-mini-note" aria-label="侧边栏提示">
+                    <span class="sidebar-mini-dot" aria-hidden="true"></span>
+                    <span class="sidebar-mini-text">上游后端 · 轻量管理 UI</span>
+                </div>
 
                 <nav class="nav-menu">
                     <a href="#preview" class="nav-item active" data-section="preview" onclick="switchSection('preview'); return false;">
@@ -291,86 +257,111 @@ export const HTML_TEMPLATE = /* html */ `
                     <p class="proxy-config-note">设置会保存在浏览器本地存储中，清除网页本地存储或留空后保存即可恢复默认。</p>
                 </div>
 
-                <div class="preview-command-grid preview-command-grid-single">
-                    <div class="preview-hero-card api-service-hero api-service-hero-refined">
-                        <div class="hero-main-row">
-                            <div class="hero-brand-block">
-                                <div class="hero-overview-topline">
-                                    <span class="preview-hero-eyebrow">首页概览</span>
-                                    <div class="hero-version-tag" id="hero-version-panel" onclick="showUpdateGuide()" role="button" tabindex="0" title="查看运行状态与版本信息">
-                                        <span class="hero-version-badge" id="hero-current-version">v${globals.version}</span>
-                                        <span class="hero-version-divider">·</span>
-                                        <span class="hero-version-status hero-version-status-checking" id="hero-version-status">检查中...</span>
-                                    </div>
-                                </div>
-                                <div class="preview-hero-header preview-hero-header-refined">
-                                    <div class="preview-hero-icon">
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                            <path d="M4 7h16M4 12h16M4 17h10"/>
-                                            <path d="M18 17l2 2 4-4"/>
-                                        </svg>
-                                    </div>
-                                    <div class="preview-hero-titles">
-                                        <h2 class="preview-hero-title">LogVar API</h2>
-                                        <p class="preview-hero-subtitle">在这里快速查看接入地址、当前状态和已完成设置。</p>
-                                    </div>
-                                </div>
-                                <div class="hero-status-rail">
-                                    <div class="hero-status-panel" id="system-status-card">
-                                        <span class="stat-icon-wrapper stat-icon-status" id="status-icon-wrapper">
-                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                                <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
-                                            </svg>
-                                        </span>
-                                        <div class="hero-status-copy">
-                                            <span class="hero-status-label">服务状态</span>
-                                            <strong class="stat-value stat-value-status" id="system-status">检测中...</strong>
-                                        </div>
-                                    </div>
-                                    <div class="hero-mode-panel">
-                                        <span class="stat-icon-wrapper stat-icon-mode mode-preview" id="mode-icon-wrapper" aria-label="预览模式">
-                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                <path d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0z"/>
-                                                <path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
-                                            </svg>
-                                        </span>
-                                        <div class="hero-status-copy">
-                                            <span class="hero-status-label">当前访问</span>
-                                            <strong class="hero-mode-value" id="current-mode">检测中...</strong>
-                                        </div>
-                                    </div>
-                                </div>
+                <div class="service-entry-card" aria-label="弹幕接入中枢">
+                    <div class="service-entry-glow" aria-hidden="true"></div>
+                    <div class="service-entry-left">
+                        <div class="service-entry-kicker-row">
+                            <span class="service-entry-kicker">接入中枢</span>
+                            <button class="service-entry-version" id="hero-version-panel" onclick="showUpdateGuide()" type="button" title="查看版本信息">
+                                <span id="hero-current-version">v${globals.version}</span>
+                                <span class="service-entry-version-separator">/</span>
+                                <span class="hero-version-status hero-version-status-checking" id="hero-version-status">检查中...</span>
+                            </button>
+                        </div>
+                        <h2 class="service-entry-title">把弹幕服务接入播放器，只保留真正需要的入口。</h2>
+                        <p class="service-entry-subtitle">复制接入地址、验证接口、查看日志和调整配置都从这里开始。后端跟随上游，首页只呈现稳定且可操作的信息。</p>
+
+                        <button class="service-entry-endpoint hero-endpoint-panel" onclick="copyApiEndpoint()" type="button" aria-label="复制播放器接入地址">
+                            <span class="service-entry-endpoint-copy">
+                                <span class="service-entry-endpoint-label">播放器接入地址</span>
+                                <strong class="service-entry-endpoint-value" id="api-endpoint">加载中...</strong>
+                            </span>
+                            <span class="service-entry-copy-icon" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M8 16H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2"/>
+                                    <rect x="8" y="8" width="12" height="12" rx="2"/>
+                                </svg>
+                            </span>
+                        </button>
+                    </div>
+
+                    <div class="service-entry-right">
+                        <div class="service-entry-actions" aria-label="推荐操作">
+                            <button class="entry-action-card primary" onclick="copyApiEndpoint()" type="button">
+                                <span class="entry-action-icon" aria-hidden="true">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M10 13a5 5 0 0 0 7.07 0l1.41-1.41a5 5 0 0 0-7.07-7.07L10.7 5.23"/>
+                                        <path d="M14 11a5 5 0 0 0-7.07 0L5.52 12.41a5 5 0 0 0 7.07 7.07l.71-.71"/>
+                                    </svg>
+                                </span>
+                                <span class="entry-action-copy">
+                                    <strong>复制接入</strong>
+                                    <small>直接给播放器使用</small>
+                                </span>
+                            </button>
+                            <button class="entry-action-card" onclick="switchSection('api')" type="button">
+                                <span class="entry-action-icon" aria-hidden="true">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M8 9l3 3-3 3"/>
+                                        <path d="M13 15h3"/>
+                                        <rect x="3" y="4" width="18" height="16" rx="2"/>
+                                    </svg>
+                                </span>
+                                <span class="entry-action-copy">
+                                    <strong>接口测试</strong>
+                                    <small>验证搜索和弹幕输出</small>
+                                </span>
+                            </button>
+                            <button class="entry-action-card" onclick="switchSection('logs')" type="button">
+                                <span class="entry-action-icon" aria-hidden="true">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                        <path d="M14 2v6h6"/>
+                                        <path d="M8 13h8M8 17h5"/>
+                                    </svg>
+                                </span>
+                                <span class="entry-action-copy">
+                                    <strong>运行日志</strong>
+                                    <small>查看请求与源站状态</small>
+                                </span>
+                            </button>
+                        </div>
+
+                        <div class="service-entry-signal-grid" aria-label="当前服务信号">
+                            <div class="entry-signal-card" id="system-status-card">
+                                <span class="stat-icon-wrapper stat-icon-status" id="status-icon-wrapper">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+                                    </svg>
+                                </span>
+                                <span class="entry-signal-copy">
+                                    <small>服务状态</small>
+                                    <strong class="stat-value stat-value-status" id="system-status">检测中...</strong>
+                                </span>
                             </div>
-                            <div class="hero-service-panel">
-                                <div class="hero-service-header">
-                                    <span class="hero-service-kicker">快速开始</span>
-                                    <span class="hero-service-note">复制地址后即可接入播放器</span>
-                                </div>
-                                <div class="hero-service-body">
-                                    <button class="hero-endpoint-panel" onclick="copyApiEndpoint()" type="button">
-                                        <span class="hero-endpoint-label">播放器接入地址</span>
-                                        <span class="hero-endpoint-value" id="api-endpoint">加载中...</span>
-                                        <span class="hero-endpoint-hint">点击复制接入地址</span>
-                                    </button>
-                                    <div class="preview-stats-strip service-panel-metrics" id="preview-stats-grid">
-                                        <div class="hero-metric-item hero-metric-item-total">
-                                            <span class="hero-metric-label">可用设置</span>
-                                            <div class="hero-metric-main">
-                                                <strong class="stat-value" id="total-configs">-</strong>
-                                                <span class="hero-metric-unit">项</span>
-                                            </div>
-                                            <span class="hero-metric-meta">已识别的设置项</span>
-                                        </div>
-                                        <div class="hero-metric-item hero-metric-item-manual">
-                                            <span class="hero-metric-label">已完成设置</span>
-                                            <div class="hero-metric-main">
-                                                <strong class="stat-value" id="manual-configs">-</strong>
-                                                <span class="hero-metric-unit">项</span>
-                                            </div>
-                                            <span class="hero-metric-meta">已填写并生效</span>
-                                        </div>
-                                    </div>
-                                </div>
+                            <div class="entry-signal-card">
+                                <span class="stat-icon-wrapper stat-icon-mode mode-preview" id="mode-icon-wrapper">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0z"/>
+                                        <path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                                    </svg>
+                                </span>
+                                <span class="entry-signal-copy">
+                                    <small>当前访问</small>
+                                    <strong class="hero-mode-value" id="current-mode">检测中...</strong>
+                                </span>
+                            </div>
+                            <div class="entry-signal-card compact">
+                                <span class="entry-signal-copy">
+                                    <small>可用设置</small>
+                                    <strong><span class="stat-value" id="total-configs">-</span><em>项</em></strong>
+                                </span>
+                            </div>
+                            <div class="entry-signal-card compact">
+                                <span class="entry-signal-copy">
+                                    <small>已完成</small>
+                                    <strong><span class="stat-value" id="manual-configs">-</span><em>项</em></strong>
+                                </span>
                             </div>
                         </div>
                     </div>
