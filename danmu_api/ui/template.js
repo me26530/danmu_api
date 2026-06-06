@@ -266,14 +266,14 @@ export const HTML_TEMPLATE = /* html */ `
                                 <button class="home-entry-version" id="hero-version-panel" onclick="showUpdateGuide()" type="button" title="查看版本信息">
                                     <span class="hero-version-status hero-version-status-checking" id="hero-version-status">v${globals.version}</span>
                                 </button>
-                            </div>
-                            <div class="home-entry-inline-status" id="system-status-card">
-                                <span class="stat-icon-wrapper stat-icon-status" id="status-icon-wrapper" aria-hidden="true">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
-                                    </svg>
-                                </span>
-                                <strong class="stat-value stat-value-status" id="system-status">检测中...</strong>
+                                <div class="home-entry-inline-status" id="system-status-card">
+                                    <span class="stat-icon-wrapper stat-icon-status" id="status-icon-wrapper" aria-hidden="true">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+                                        </svg>
+                                    </span>
+                                    <strong class="stat-value stat-value-status" id="system-status">检测中...</strong>
+                                </div>
                             </div>
                         </div>
                     </div>

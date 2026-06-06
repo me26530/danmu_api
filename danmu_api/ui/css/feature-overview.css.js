@@ -1780,18 +1780,17 @@ export const overviewCssContent = /* css */ `/* ================================
 }
 
 .home-entry-heading {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.36rem;
+    display: block;
     min-width: 0;
 }
 
 .home-entry-title-row {
     display: inline-flex;
     align-items: center;
-    gap: 0.44rem;
+    gap: 0.38rem;
     min-width: 0;
+    max-width: 100%;
+    flex-wrap: nowrap;
 }
 
 .home-entry-logo {
@@ -2023,8 +2022,8 @@ export const overviewCssContent = /* css */ `/* ================================
     }
 
     .home-entry-title-row {
-        flex-wrap: wrap;
-        row-gap: 0.28rem;
+        flex-wrap: nowrap;
+        gap: 0.3rem;
     }
 
     .home-entry-logo {
@@ -2034,7 +2033,15 @@ export const overviewCssContent = /* css */ `/* ================================
     }
 
     .home-entry-title {
-        font-size: 1.08rem;
+        font-size: 1rem;
+    }
+
+    .home-entry-inline-status {
+        padding: 0.16rem 0.46rem;
+    }
+
+    .home-entry-inline-status #status-icon-wrapper {
+        display: none;
     }
 
     .home-entry-endpoint {
