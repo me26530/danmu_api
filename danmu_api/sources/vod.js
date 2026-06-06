@@ -4,8 +4,7 @@ import { log } from "../utils/log-util.js";
 import { httpGet } from "../utils/http-util.js";
 import { generateValidStartDate } from "../utils/time-util.js";
 import { addAnime, removeEarliestAnime } from "../utils/cache-util.js";
-import { preferSeasonCandidatesIfPresent, printFirst200Chars, resolveQuerySeason, titleMatches, sanitizeSearchKeyword } from "../utils/common-util.js";
-import { mapWithConcurrency, resolveSourceConcurrency } from '../utils/concurrency-util.js';
+import { printFirst200Chars, titleMatches, sanitizeSearchKeyword, getExplicitSeasonNumber, extractSeasonNumberFromAnimeTitle } from "../utils/common-util.js";
 
 // =====================
 // 获取vod源播放链接
@@ -29,17 +28,17 @@ export default class VodSource extends BaseSource {
       );
       // 检查 response.data.list 是否存在且长度大于 0
       if (response && response.data && response.data.list && response.data.list.length > 0) {
-        log("info", `请求 ${serverName}(${server}) 成功`);
+        log("info", `[VOD] 请求 ${serverName}(${server}) 成功`);
         const data = response.data;
-        log("info", `${serverName} response: ↓↓↓`);
+        log("info", `[VOD] ${serverName} response: ↓↓↓`);
         printFirst200Chars(data);
         return { serverName, list: data.list };
       } else {
-        log("info", `请求 ${serverName}(${server}) 成功，但 response.data.list 为空`);
+        log("info", `[VOD] 请求 ${serverName}(${server}) 成功，但 response.data.list 为空`);
         return { serverName, list: [] };
       }
     } catch (error) {
-      log("error", `请求 ${serverName}(${server}) 失败:`, {
+      log("error", `[VOD] 请求 ${serverName}(${server}) 失败:`, {
         message: error.message,
         name: error.name,
         stack: error.stack,
@@ -144,7 +143,16 @@ export default class VodSource extends BaseSource {
 
   async getEpisodes(id) {}
 
-  async handleAnimes(sourceAnimes, queryTitle, curAnimes, vodName, detailStore = null) {
+  /**
+   * 处理搜索结果
+   * @param {Array} sourceAnimes 原始数据
+   * @param {string} queryTitle 关键词
+   * @param {Array} curAnimes 结果池
+   * @param {string} vodName VOD资源站名称
+   * @param {Map|null} detailStore 详情缓存
+   * @param {number|null} querySeason 目标季度
+   */
+  async handleAnimes(sourceAnimes, queryTitle, curAnimes, vodName, detailStore = null, querySeason = null) {
     const tmpAnimes = [];
 
     // 添加错误处理，确保sourceAnimes是数组
@@ -153,14 +161,27 @@ export default class VodSource extends BaseSource {
       return [];
     }
 
-    const querySeason = resolveQuerySeason(queryTitle, detailStore);
-    const seasonPreferredAnimes = preferSeasonCandidatesIfPresent(sourceAnimes, querySeason, anime => anime.vod_name || '');
+    // 基础标题与季度匹配过滤
+    let filteredAnimes = sourceAnimes.filter(anime => titleMatches(anime.vod_name, queryTitle, querySeason));
 
-    const matchedAnimes = seasonPreferredAnimes.filter(anime => titleMatches(anime.vod_name, queryTitle));
-    const processedPayloads = await mapWithConcurrency(
-      matchedAnimes,
-      resolveSourceConcurrency('vod', globals),
-      async (anime) => {
+    // 提取搜索词中的明确季度信息或使用传入的季度参数
+    const resolvedQuerySeason = querySeason !== null ? querySeason : getExplicitSeasonNumber(queryTitle);
+
+    // 初始列表预过滤机制：若用户指定了季度，优先检查结果中是否已包含匹配项
+    if (resolvedQuerySeason !== null) {
+      const seasonFiltered = filteredAnimes.filter(anime => {
+        const s = extractSeasonNumberFromAnimeTitle(anime.vod_name).season;
+        return s === resolvedQuerySeason || (resolvedQuerySeason === 1 && s === null);
+      });
+
+      // 如果已命中目标，减少详情请求量
+      if (seasonFiltered.length > 0) {
+        filteredAnimes = seasonFiltered;
+        log("info", `[VOD] 结果已命中目标季(第${resolvedQuerySeason}季)，跳过非目标季相关请求`);
+      }
+    }
+
+    const processVodAnimes = await Promise.all(filteredAnimes.map(async (anime) => {
         try {
           let vodPlayFromList = anime.vod_play_from.split("$$$");
           vodPlayFromList = vodPlayFromList.map(item => {
@@ -190,40 +211,33 @@ export default class VodSource extends BaseSource {
             }
           }
 
-          if (links.length === 0) return null;
+          if (links.length > 0) {
+            let transformedAnime = {
+              animeId: Number(anime.vod_id),
+              bangumiId: String(anime.vod_id),
+              animeTitle: `${anime.vod_name}(${anime.vod_year})【${anime.type_name}】from ${vodName}`,
+              type: anime.type_name,
+              typeDescription: anime.type_name,
+              imageUrl: anime.vod_pic,
+              startDate: generateValidStartDate(anime.vod_year),
+              episodeCount: links.length,
+              rating: 0,
+              isFavorited: true,
+              source: "vod",
+            };
 
-          const transformedAnime = {
-            animeId: Number(anime.vod_id),
-            bangumiId: String(anime.vod_id),
-            animeTitle: `${anime.vod_name}(${anime.vod_year})【${anime.type_name}】from ${vodName}`,
-            type: anime.type_name,
-            typeDescription: anime.type_name,
-            imageUrl: anime.vod_pic,
-            startDate: generateValidStartDate(anime.vod_year),
-            episodeCount: links.length,
-            rating: 0,
-            isFavorited: true,
-            source: "vod",
-          };
-
-          return { anime: transformedAnime, links };
+            tmpAnimes.push(transformedAnime);
+            addAnime({...transformedAnime, links: links}, detailStore);
+            if (globals.animes.length > globals.MAX_ANIMES) removeEarliestAnime();
+          }
         } catch (error) {
           log("error", `[VOD] Error processing anime: ${error.message}`);
-          return null;
         }
-      }
-    );
-
-    for (const payload of processedPayloads) {
-      if (!payload) continue;
-      tmpAnimes.push(payload.anime);
-      addAnime({...payload.anime, links: payload.links}, detailStore);
-      if (globals.animes.length > globals.MAX_ANIMES) removeEarliestAnime();
-    }
+      }));
 
     this.sortAndPushAnimesByYear(tmpAnimes, curAnimes);
 
-    return processedPayloads;
+    return processVodAnimes;
   }
 
   async getEpisodeDanmu(id) {}

@@ -1678,17 +1678,6 @@ FFFFFF FF5733 00FF00"></textarea>
                                     <span class="action-btn-desc">检查Cookie有效性</span>
                                 </div>
                             </button>
-                            <button type="button" class="bili-action-btn bili-action-warning" onclick="refreshBilibiliCookie()">
-                                <div class="action-btn-icon">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-                                    </svg>
-                                </div>
-                                <div class="action-btn-text">
-                                    <span class="action-btn-title">刷新Cookie</span>
-                                    <span class="action-btn-desc">延长有效期</span>
-                                </div>
-                            </button>
                         </div>
                     </div>
                     
@@ -4120,121 +4109,6 @@ async function verifyBilibiliCookie() {
         
     } else {
         customAlert('验证函数未初始化，请刷新页面重试', '❌ 错误');
-    }
-}
-
-/* ========================================
-   刷新 Bilibili Cookie（使用 refresh_token）
-   ======================================== */
-async function refreshBilibiliCookie() {
-    const textInput = document.getElementById('text-value');
-    
-    if (!textInput) return;
-    
-    const cookie = textInput.value.trim();
-    
-    if (!cookie) {
-        customAlert('请先输入或扫码获取 Cookie', '⚠️ 未配置');
-        return;
-    }
-    
-    // UI 元素引用
-    const statusTitle = document.getElementById('bili-cookie-status-title');
-    const statusSubtitle = document.getElementById('bili-cookie-status-subtitle');
-    const statusBadge = document.getElementById('bili-cookie-status-badge');
-    const statusIcon = document.getElementById('bili-cookie-status-icon');
-    
-    // 设置为刷新中状态
-    if (statusTitle) statusTitle.textContent = '刷新中...';
-    if (statusSubtitle) statusSubtitle.textContent = '正在尝试刷新 Token';
-    if (statusBadge) {
-        statusBadge.className = 'bili-cookie-status-badge loading';
-        statusBadge.innerHTML = '<span class="status-dot loading"></span><span class="status-text">刷新中</span>';
-    }
-    if (statusIcon) {
-        statusIcon.className = 'bili-cookie-status-icon loading';
-        statusIcon.innerHTML = '<div class="bili-status-spinner"></div>';
-    }
-    
-    addLog('🔄 正在刷新 Bilibili Cookie...', 'info');
-    
-    try {
-        // 调用后端刷新接口
-        const response = await fetch(buildApiUrl('/api/cookie/refresh-token', true), {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ cookie: cookie })
-        });
-        
-        const result = await response.json();
-        
-        if (result.success && result.data && result.data.newCookie) {
-            let newCookie = result.data.newCookie;
-            const newRefreshToken = result.data.newRefreshToken;
-            const uname = result.data.uname || '未知用户';
-            
-            // 如果后端返回了新的 refresh_token，拼接到 cookie 后面
-            if (newRefreshToken) {
-                if (newCookie && !newCookie.endsWith(';') && !newCookie.endsWith('; ')) {
-                    newCookie += '; ';
-                }
-                newCookie += \`refresh_token=\${newRefreshToken}\`;
-            }
-
-            // 更新输入框中的 Cookie
-            textInput.value = newCookie;
-            textInput.dispatchEvent(new Event('input', { bubbles: true }));
-            
-            // 高亮显示更新成功
-            textInput.style.borderColor = 'var(--success-color)';
-            textInput.style.boxShadow = '0 0 0 3px rgba(16, 185, 129, 0.2)';
-            
-            setTimeout(() => {
-                textInput.style.borderColor = '';
-                textInput.style.boxShadow = '';
-            }, 2000);
-            
-            addLog('✅ Cookie 刷新成功，用户: ' + uname + '，请点击保存按钮提交', 'success');
-            showSuccessAnimation('Cookie 已刷新');
-            
-            // 调用自动检测以更新 UI 卡片为成功状态
-            if (typeof autoCheckBilibiliCookieStatus === 'function') {
-                autoCheckBilibiliCookieStatus();
-            }
-            
-        } else if (result.success && result.data && result.data.isValid) {
-            // Cookie 仍然有效，无需刷新
-            addLog('ℹ️ Cookie 仍然有效，无需刷新', 'info');
-            customAlert('当前 Cookie 仍然有效，无需刷新', '✅ 无需刷新');
-            
-            // 恢复 UI 状态
-            if (typeof autoCheckBilibiliCookieStatus === 'function') {
-                autoCheckBilibiliCookieStatus();
-            }
-        } else {
-            const errorMsg = result.data?.message || result.message || '刷新失败';
-            
-            // UI 显示错误
-            if (statusTitle) statusTitle.textContent = '刷新失败';
-            if (statusSubtitle) statusSubtitle.textContent = errorMsg;
-            if (statusBadge) {
-                statusBadge.className = 'bili-cookie-status-badge error';
-                statusBadge.innerHTML = '<span class="status-dot error"></span><span class="status-text">失败</span>';
-            }
-            if (statusIcon) {
-                statusIcon.className = 'bili-cookie-status-icon error';
-                statusIcon.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6m0-6l6 6"/></svg>';
-            }
-            
-            addLog('❌ Cookie 刷新失败: ' + errorMsg + '，建议重新扫码登录', 'error');
-        }
-    } catch (error) {
-        if (statusTitle) statusTitle.textContent = '请求失败';
-        if (statusSubtitle) statusSubtitle.textContent = error.message;
-        
-        addLog('❌ Cookie 刷新请求失败: ' + error.message, 'error');
     }
 }
 

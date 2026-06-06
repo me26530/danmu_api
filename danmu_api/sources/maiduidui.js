@@ -2,14 +2,12 @@ import BaseSource from './base.js';
 import { globals } from '../configs/globals.js';
 import { log } from "../utils/log-util.js";
 import { httpPost, buildQueryString } from "../utils/http-util.js";
-import { convertToAsciiSum } from "../utils/codec-util.js";
-import { md5 } from "../utils/crypto-util.js";
+import { convertToAsciiSum, md5 } from "../utils/codec-util.js";
 import { hexToInt } from "../utils/danmu-util.js";
 import { generateValidStartDate } from "../utils/time-util.js";
 import { addAnime, removeEarliestAnime } from "../utils/cache-util.js";
-import { preferSeasonCandidatesIfPresent, printFirst200Chars, resolveQuerySeason, titleMatches } from "../utils/common-util.js";
+import { printFirst200Chars, titleMatches, getExplicitSeasonNumber, extractSeasonNumberFromAnimeTitle } from "../utils/common-util.js";
 import { SegmentListResponse } from '../models/dandan-model.js';
-import { mapWithConcurrency, resolveSourceConcurrency } from '../utils/concurrency-util.js';
 
 // =====================
 // 获取埋堆堆弹幕
@@ -105,7 +103,7 @@ class MaiduiduiSource extends BaseSource {
       return animes;
     } catch (error) {
       // 捕获请求中的错误
-      log("error", "getMaiduiduiAnimes error:", {
+      log("error", "[Maiduidui] getMaiduiduiAnimes error:", {
         message: error.message,
         name: error.name,
         stack: error.stack,
@@ -146,7 +144,7 @@ class MaiduiduiSource extends BaseSource {
       return 0;
     } catch (error) {
       // 捕获请求中的错误
-      log("error", "getMaiduiduiDetail error:", {
+      log("error", "[Maiduidui] getMaiduiduiDetail error:", {
         message: error.message,
         name: error.name,
         stack: error.stack,
@@ -187,7 +185,7 @@ class MaiduiduiSource extends BaseSource {
       return eps;
     } catch (error) {
       // 捕获请求中的错误
-      log("error", "getMaiduiduiEposides error:", {
+      log("error", "[Maiduidui] getMaiduiduiEposides error:", {
         message: error.message,
         name: error.name,
         stack: error.stack,
@@ -196,7 +194,15 @@ class MaiduiduiSource extends BaseSource {
     }
   }
 
-  async handleAnimes(sourceAnimes, queryTitle, curAnimes, detailStore = null) {
+  /**
+   * 处理搜索结果
+   * @param {Array} sourceAnimes 原始数据
+   * @param {string} queryTitle 关键词
+   * @param {Array} curAnimes 结果池
+   * @param {Map} detailStore 详情缓存
+   * @param {number|null} querySeason 目标季度
+   */
+  async handleAnimes(sourceAnimes, queryTitle, curAnimes, detailStore = null, querySeason = null) {
     const tmpAnimes = [];
 
     // 添加错误处理，确保sourceAnimes是数组
@@ -205,14 +211,28 @@ class MaiduiduiSource extends BaseSource {
       return [];
     }
 
-    const querySeason = resolveQuerySeason(queryTitle, detailStore);
-    const seasonPreferredAnimes = preferSeasonCandidatesIfPresent(sourceAnimes, querySeason, anime => anime.name || anime.title || '');
+    // 基础标题与季度匹配过滤
+    let filteredAnimes = sourceAnimes.filter(s => titleMatches(s.name, queryTitle, querySeason));
 
-    const matchedAnimes = seasonPreferredAnimes.filter(s => titleMatches(s.name, queryTitle));
-    const processedPayloads = await mapWithConcurrency(
-      matchedAnimes,
-      resolveSourceConcurrency('maiduidui', globals),
-      async (anime) => {
+    // 提取搜索词中的明确季度信息或使用传入的季度参数
+    const resolvedQuerySeason = querySeason !== null ? querySeason : getExplicitSeasonNumber(queryTitle);
+
+    // 初始列表预过滤机制：若用户指定了季度，优先检查结果中是否已包含匹配项
+    if (resolvedQuerySeason !== null) {
+      const seasonFiltered = filteredAnimes.filter(anime => {
+        const s = extractSeasonNumberFromAnimeTitle(anime.name).season;
+        return s === resolvedQuerySeason || (resolvedQuerySeason === 1 && s === null);
+      });
+
+      // 如果已命中目标，减少详情请求量
+      if (seasonFiltered.length > 0) {
+        filteredAnimes = seasonFiltered;
+        log("info", `[Maiduidui] 结果已命中目标季(第${resolvedQuerySeason}季)，跳过非目标季相关请求`);
+      }
+    }
+
+    // 使用 map 和 async 时需要返回 Promise 数组，并等待所有 Promise 完成
+    const processMaiduiduiAnimes = await Promise.all(filteredAnimes.map(async (anime) => {
         try {
           const eps = await this.getEpisodes(anime.url);
           let links = [];
@@ -225,44 +245,40 @@ class MaiduiduiSource extends BaseSource {
             });
           }
 
-          if (links.length === 0) return null;
+          if (links.length > 0) {
+            let transformedAnime = {
+              animeId: convertToAsciiSum(anime.url),
+              bangumiId: anime.url,
+              animeTitle: `${anime.name}(${anime.year})【${anime.type}】from maiduidui`,
+              type: anime.type,
+              typeDescription: anime.type,
+              imageUrl: anime.img,
+              startDate: generateValidStartDate(anime.year),
+              episodeCount: links.length,
+              rating: 0,
+              isFavorited: true,
+              source: "maiduidui",
+            };
 
-          const transformedAnime = {
-            animeId: convertToAsciiSum(anime.url),
-            bangumiId: anime.url,
-            animeTitle: `${anime.name}(${anime.year})【${anime.type}】from maiduidui`,
-            type: anime.type,
-            typeDescription: anime.type,
-            imageUrl: anime.img,
-            startDate: generateValidStartDate(anime.year),
-            episodeCount: links.length,
-            rating: 0,
-            isFavorited: true,
-            source: "maiduidui",
-          };
+            tmpAnimes.push(transformedAnime);
 
-          return { anime: transformedAnime, links };
+            addAnime({...transformedAnime, links: links}, detailStore);
+
+            if (globals.animes.length > globals.MAX_ANIMES) removeEarliestAnime();
+          }
         } catch (error) {
           log("error", `[Maiduidui] Error processing anime: ${error.message}`);
-          return null;
         }
-      }
+      })
     );
-
-    for (const payload of processedPayloads) {
-      if (!payload) continue;
-      tmpAnimes.push(payload.anime);
-      addAnime({...payload.anime, links: payload.links}, detailStore);
-      if (globals.animes.length > globals.MAX_ANIMES) removeEarliestAnime();
-    }
 
     this.sortAndPushAnimesByYear(tmpAnimes, curAnimes);
 
-    return processedPayloads;
+    return processMaiduiduiAnimes;
   }
 
   async getEpisodeDanmu(id) {
-    log("info", "开始从本地请求埋堆堆弹幕...", id);
+    log("info", "[Maiduidui] 开始从本地请求埋堆堆弹幕...", id);
     
     // 获取弹幕分段数据
     const segmentResult = await this.getEpisodeDanmuSegments(id);
@@ -271,7 +287,7 @@ class MaiduiduiSource extends BaseSource {
     }
 
     const segmentList = segmentResult.segmentList;
-    log("info", `弹幕分段数量: ${segmentList.length}`);
+    log("info", `[Maiduidui] 弹幕分段数量: ${segmentList.length}`);
 
     // 并发请求所有弹幕段，限制并发数量为20
     const MAX_CONCURRENT = 20;
@@ -299,7 +315,7 @@ class MaiduiduiSource extends BaseSource {
             allComments.push(...comments);
           }
         } else {
-          log("error", `获取弹幕段失败 (${start}-${end}s):`, result.reason.message);
+          log("error", `[Maiduidui] 获取弹幕段失败 (${start}-${end}s):`, result.reason.message);
         }
       }
       
@@ -310,7 +326,7 @@ class MaiduiduiSource extends BaseSource {
     }
 
     if (allComments.length === 0) {
-      log("info", `埋堆堆: 该视频暂无弹幕数据 (vid=${id})`);
+      log("info", `[Maiduidui] 埋堆堆: 该视频暂无弹幕数据 (vid=${id})`);
       return [];
     }
 
@@ -320,13 +336,13 @@ class MaiduiduiSource extends BaseSource {
   }
 
   async getEpisodeDanmuSegments(id) {
-    log("info", "获取埋堆堆弹幕分段列表...", id);
+    log("info", "[Maiduidui] 获取埋堆堆弹幕分段列表...", id);
 
     const idInfo = this.extractByRegex(id);
     const uuid = idInfo.uuid;
     const duration = await this.getDetail(id);
-    log("info", "uuid:", uuid);
-    log("info", "duration:", duration);
+    log("info", "[Maiduidui] uuid:", uuid);
+    log("info", "[Maiduidui] duration:", duration);
 
     const segmentDuration = 60; // 每个分片1分钟
     const segmentList = [];
@@ -380,7 +396,7 @@ class MaiduiduiSource extends BaseSource {
 
       return contents;
     } catch (error) {
-      log("error", "请求分片弹幕失败:", error);
+      log("error", "[Maiduidui] 请求分片弹幕失败:", error);
       return []; // 返回空数组而不是抛出错误，保持与getEpisodeDanmu一致的行为
     }
   }

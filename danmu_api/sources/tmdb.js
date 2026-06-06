@@ -3,8 +3,6 @@ import { log } from "../utils/log-util.js";
 import { getDoubanInfoByImdbId } from "../utils/douban-util.js";
 import { getTmdbExternalIds, searchTmdbTitles} from "../utils/tmdb-util.js";
 import { getImdbepisodes, getImdbSeasons } from "../utils/imdb-util.js";
-import { globals } from '../configs/globals.js';
-import { mapWithConcurrency, resolveSourceConcurrency } from '../utils/concurrency-util.js';
 
 // =====================
 // 获取TMDB源播放链接
@@ -15,23 +13,22 @@ export default class TmdbSource extends BaseSource {
     this.doubanSource = doubanSource;
   }
 
-  async _getDoubanInfo(finalImdbId, mediaType) {
-    if (!finalImdbId) return null;
+  async _getDoubanInfo(finalImdbId, mediaType, doubanIds) {
+    if (!finalImdbId) return;
     const doubanInfo = await getDoubanInfoByImdbId(finalImdbId);
-    if (!doubanInfo || !doubanInfo?.data) return null;
+    if (!doubanInfo || !doubanInfo?.data) return;
     const url = doubanInfo?.data?.id; // "https://api.douban.com/movie/1299131"
     if (url) {
       const parts = url.split("/"); // ["https:", "", "api.douban.com", "movie", "1299131"]
       const doubanId = parts.pop(); // 最后一个就是 ID
       const typeName = mediaType === 'movie' ? '电影' : '电视剧';
       if (doubanId) {
-        return {
+        doubanIds.push({
           layout: "subject", target_id: doubanId, type_name: typeName,
           target: {cover_url: doubanInfo.data?.image, title: doubanInfo.data?.alt_title}
-        };
+        });
       }
     }
-    return null;
   }
 
   async getDoubanIdByTmdbId(mediaType, tmdbId) {
@@ -45,18 +42,14 @@ export default class TmdbSource extends BaseSource {
       if (!imdbId) return [];
 
       if (mediaType === 'movie') {
-        const doubanInfo = await this._getDoubanInfo(imdbId, mediaType);
-        if (doubanInfo) doubanIds.push(doubanInfo);
+        await this._getDoubanInfo(imdbId, mediaType, doubanIds);
       } else {
         const seasons = await getImdbSeasons(imdbId);
-        log("info", "imdb seasons:", seasons.data.seasons);
+        log("info", "[TMDB] imdb seasons:", seasons.data.seasons);
 
-        const seasonDoubanInfos = await mapWithConcurrency(
-          seasons?.data?.seasons ?? [],
-          resolveSourceConcurrency('tmdb', globals),
-          async (season) => {
+        const seasonPromises = (seasons?.data?.seasons ?? []).map(async (season) => {
           let finalImdbId = imdbId;
-          log("info", "imdb season:", season.season);
+          log("info", "[TMDB] imdb season:", season.season);
 
           try {
             if (Number(season.season) !== 1) {
@@ -64,19 +57,18 @@ export default class TmdbSource extends BaseSource {
               finalImdbId = episodes.data?.episodes.find((ep) => ep.episodeNumber === 1)?.id ?? "";
             }
 
-            return await this._getDoubanInfo(finalImdbId, mediaType);
+            await this._getDoubanInfo(finalImdbId, mediaType, doubanIds);
           } catch (error) {
-            log("error", `处理第 ${season.season} 季失败，继续执行其他季:`, error);
-            return null;
+            log("error", `[TMDB] 处理第 ${season.season} 季失败，继续执行其他季:`, error);
           }
-          }
-        );
-        doubanIds.push(...seasonDoubanInfos.filter(Boolean));
+        });
+
+        await Promise.all(seasonPromises);
       }
 
       return doubanIds;
     } catch (error) {
-      log("error", "getTmdbIds error:", {
+      log("error", "[TMDB] getTmdbIds error:", {
         message: error.message,
         name: error.name,
         stack: error.stack,
@@ -98,26 +90,24 @@ export default class TmdbSource extends BaseSource {
         tmdbItems = data.results.filter(item => (item.name || item.title) === keyword);
       }
 
-      log("info", `tmdb items.length: ${tmdbItems.length}`);
+      log("info", `[TMDB] tmdb items.length: ${tmdbItems.length}`);
 
-      const doubanResults = await mapWithConcurrency(
-        tmdbItems,
-        resolveSourceConcurrency('tmdb', globals),
-        async (tmdbItem) => {
+      const doubanPromises = tmdbItems.map(async (tmdbItem) => {
         try {
           const doubanIds = await this.getDoubanIdByTmdbId(tmdbItem.media_type, tmdbItem.id);
           return doubanIds;
         } catch (error) {
-          log("error", `获取 TMDB ID ${tmdbItem.id} 的豆瓣 ID 失败，继续处理其他条目:`, error);
+          log("error", `[TMDB] 获取 TMDB ID ${tmdbItem.id} 的豆瓣 ID 失败，继续处理其他条目:`, error);
           return []; // 失败返回空数组，不中断合并
         }
-        }
-      );
+      });
+
+      const doubanResults = await Promise.all(doubanPromises);
       tmpAnimes = [...tmpAnimes, ...doubanResults.flat()];
 
       return tmpAnimes;
     } catch (error) {
-      log("error", "getTmdbAnimes error:", {
+      log("error", "[TMDB] getTmdbAnimes error:", {
         message: error.message,
         name: error.name,
         stack: error.stack,
@@ -128,13 +118,16 @@ export default class TmdbSource extends BaseSource {
 
   async getEpisodes(id) {}
 
-  async handleAnimes(sourceAnimes, queryTitle, curAnimes, options = {}, legacyDetailStore = null) {
-    const handleOptions = legacyDetailStore instanceof Map
-      ? { ...(options && !(options instanceof Map) ? options : {}), detailStore: legacyDetailStore }
-      : options instanceof Map
-        ? { detailStore: options }
-        : (options || {});
-    return this.doubanSource.handleAnimes(sourceAnimes, queryTitle, curAnimes, handleOptions);
+  /**
+   * 转发搜索结果处理至豆瓣源
+   * @param {Array} sourceAnimes 原始数据
+   * @param {string} queryTitle 关键词
+   * @param {Array} curAnimes 结果池
+   * @param {Map|null} detailStore 详情缓存
+   * @param {number|null} querySeason 目标季度
+   */
+  async handleAnimes(sourceAnimes, queryTitle, curAnimes, detailStore = null, querySeason = null) {
+    return this.doubanSource.handleAnimes(sourceAnimes, queryTitle, curAnimes, detailStore, querySeason);
   }
 
   async getEpisodeDanmu(id) {}

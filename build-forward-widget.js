@@ -73,6 +73,46 @@ try {
     format: 'esm',
     external: ['redis', 'node-fetch', 'pako', 'fs', 'path', 'stream/promises', 'node:fs', 'node:path', 'node:stream/promises'],
     plugins: [
+      // 插件：为 Forward 浏览器构建提供 Node 内建模块的轻量 stub。
+      // 后端已跟随上游并引入 node:async_hooks / node:zlib；这些能力在浏览器小组件中不应参与打包。
+      {
+        name: 'stub-node-builtins-for-forward',
+        setup(build) {
+          build.onResolve({ filter: /^node:(async_hooks|zlib)$/ }, (args) => ({
+            path: args.path,
+            namespace: 'forward-node-builtin-stub',
+          }));
+
+          build.onLoad({ filter: /.*/, namespace: 'forward-node-builtin-stub' }, (args) => {
+            if (args.path === 'node:async_hooks') {
+              return {
+                contents: [
+                  'export class AsyncLocalStorage {',
+                  '  constructor() { this.store = undefined; }',
+                  '  run(store, callback, ...args) { const previous = this.store; this.store = store; try { return callback(...args); } finally { this.store = previous; } }',
+                  '  getStore() { return this.store; }',
+                  '  enterWith(store) { this.store = store; }',
+                  '}',
+                  ''
+                ].join('\n'),
+                loader: 'js',
+              };
+            }
+
+            if (args.path === 'node:zlib') {
+              return {
+                contents: [
+                  'export function brotliDecompressSync(input) { return input; }',
+                  ''
+                ].join('\n'),
+                loader: 'js',
+              };
+            }
+
+            return { contents: '', loader: 'js' };
+          });
+        }
+      },
       // 插件：排除UI相关模块
       {
         name: 'exclude-ui-modules',

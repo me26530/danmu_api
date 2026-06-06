@@ -133,9 +133,9 @@
 
 权限规则：
 
-- `GET /api/runtime/info`：公开只读
-- `POST /api/runtime/check-update`：公开只读
-- `POST /api/runtime/update`：管理员写操作
+- `GET [已移除]`：公开只读
+- `POST [已移除]`：公开只读
+- `POST [已移除]`：管理员写操作
 
 也就是说：
 
@@ -159,10 +159,10 @@
 
 要启用 Docker 在线更新，通常需要：
 
-- `ENABLE_RUNTIME_CONTROL=true`
+- `[已移除]=true`
 - 挂载 `/var/run/docker.sock`
-- 根据需要配置 `DOCKER_CONTAINER_NAME`
-- 根据需要配置 `DOCKER_IMAGE_NAME`
+- 根据需要配置 `[已移除]`
+- 根据需要配置 `[已移除]`
 
 ### 云平台模式
 
@@ -238,13 +238,11 @@
 | `TOKEN` | 建议 | 普通 UI / API 访问令牌 |
 | `ADMIN_TOKEN` | 必需 | 管理员 UI 入口，不配置就没有管理员能力 |
 | `DEPLOY_PLATFROM_*` | 视平台而定 | 让 UI 能调用平台 API 写回环境变量并触发重部署 |
-| `RUNTIME_MODE=cloud` | 可选 | 一般不需要；只有运行时识别失败时再补 |
 
 补充说明：
 
 - Vercel / Netlify / Cloudflare / EdgeOne 这类部署，真正生效的是平台控制台里的环境变量，不是本地 `config/.env`
 - Node / Docker 可以热加载多数配置；云平台通常要重新部署后，新实例才会读取到改动
-- 运行状态面板的只读信息不要求 `ADMIN_TOKEN`，但写操作一定要求
 
 ### 平台字段含义总览
 
@@ -414,7 +412,6 @@ DEPLOY_PLATFROM_TOKEN=your-edgeone-pages-api-token
 - 获取当前 Cookie 状态
 - 扫码登录
 - 校验 Cookie 有效性
-- 使用 `refresh_token` 刷新 Cookie
 - 保存到当前部署环境
 
 说明：
@@ -432,7 +429,6 @@ DEPLOY_PLATFROM_TOKEN=your-edgeone-pages-api-token
 - `AI_MODEL`
 - `AI_API_KEY`
 - `AI_MATCH_PROMPT`
-- `AI_TRUST_MATCH_RESULT`
 
 用途：
 
@@ -446,7 +442,7 @@ DEPLOY_PLATFROM_TOKEN=your-edgeone-pages-api-token
 - 大部分业务环境变量
 - 平台密钥
 - 缓存、匹配、弹幕处理类参数
-- Cookie、AI、运行时控制参数
+- Cookie、AI 配置
 
 建议直接在部署平台或容器启动参数中管理的：
 
@@ -467,8 +463,6 @@ DEPLOY_PLATFROM_TOKEN=your-edgeone-pages-api-token
 - `GET /api/config`
 - `GET /api/logs`
 - `GET /api/reqrecords`
-- `GET /api/runtime/info`
-- `POST /api/runtime/check-update`
 - `GET /api/cookie/status`
 
 ### 管理写接口
@@ -476,7 +470,6 @@ DEPLOY_PLATFROM_TOKEN=your-edgeone-pages-api-token
 - `POST /api/logs/clear`
 - `POST /api/cache/clear`
 - `POST /api/deploy`
-- `POST /api/runtime/update`
 - `POST /api/env/set`
 - `POST /api/env/add`
 - `POST /api/env/del`
@@ -484,9 +477,6 @@ DEPLOY_PLATFROM_TOKEN=your-edgeone-pages-api-token
 - `POST /api/cookie/qr/check`
 - `POST /api/cookie/verify`
 - `POST /api/cookie/save`
-- `POST /api/cookie/clear`
-- `POST /api/cookie/refresh`
-- `POST /api/cookie/refresh-token`
 - `POST /api/ai/verify`
 
 ## CSS 架构维护指南
@@ -499,7 +489,7 @@ DEPLOY_PLATFROM_TOKEN=your-edgeone-pages-api-token
 - `css/components-shared.css.js`：按钮、卡片、模态等复用组件
 - `css/forms-controls.css.js`：表单控件
 - `css/feature-overview.css.js`：服务概览与日志相关样式
-- `css/feature-settings.css.js`：系统设置、运行状态弹窗、Cookie / AI 编辑器
+- `css/feature-settings.css.js`：系统设置、Cookie / AI 编辑器
 - `css/feature-api.css.js`：接口测试与弹幕测试
 - `css/status.css.js`：状态类样式
 - `css/theme-dark.css.js`：深色模式补充覆盖
@@ -515,37 +505,6 @@ DEPLOY_PLATFROM_TOKEN=your-edgeone-pages-api-token
 
 ## 常见问题
 
-### 运行状态面板提示 `Unauthorized`
+### 系统设置页显示的配置项和旧版本不同
 
-先确认：
-
-- 你访问的是当前服务实例，而不是其他反代路径
-- 反代没有把 `/api/runtime/*` 拦掉
-- 如果是管理员操作，当前 URL 使用的是 `ADMIN_TOKEN`
-
-### 运行状态面板提示 `.cache` 写入失败
-
-在只读文件系统环境下，运行时状态现在会自动回退到内存态。
-如果仍报错，通常是部署环境把请求打到了旧版本实例，或者服务还没有完成新版本发布。
-
-### 云平台看不到 CPU / 内存 / 网络
-
-这是预期行为。
-云平台运行时只提供版本和状态读取，不提供宿主机资源指标。
-
-### 系统设置页不能执行重部署
-
-检查下面几项：
-
-- 是否使用 `ADMIN_TOKEN` 访问
-- 是否已配置 `DEPLOY_PLATFROM_*`
-- 当前部署平台是否在已接入的支持列表中
-
-### Docker 在线更新按钮不可用
-
-检查下面几项：
-
-- 是否设置了 `ENABLE_RUNTIME_CONTROL=true`
-- 是否挂载了 docker socket
-- 容器是否能识别当前自身容器名
-- 是否使用 `ADMIN_TOKEN` 访问
+当前后端核心已跟随上游，系统设置页只展示后端 `/api/config` 返回的 `envVarConfig`。如果某个 fork-only 环境变量不再出现，说明后端已不再支持该配置项。

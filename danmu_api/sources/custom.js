@@ -4,9 +4,7 @@ import { log } from "../utils/log-util.js";
 import { httpGet } from "../utils/http-util.js";
 import { addAnime, removeEarliestAnime } from "../utils/cache-util.js";
 import { simplized } from "../utils/zh-util.js";
-import { preferSeasonCandidatesIfPresent, resolveQuerySeason } from "../utils/common-util.js";
 import { SegmentListResponse } from '../models/dandan-model.js';
-import { mapWithConcurrency, resolveSourceConcurrency } from '../utils/concurrency-util.js';
 
 // =====================
 // 获取自定义源弹幕
@@ -23,13 +21,13 @@ export default class CustomSource extends BaseSource {
 
       // 判断 resp 和 resp.data 是否存在
       if (!resp || !resp.data) {
-        log("info", "customSourceSearchresp: 请求失败或无数据返回");
+        log("info", "[Custom] customSourceSearchresp: 请求失败或无数据返回");
         return [];
       }
 
       // 判断 seriesData 是否存在
       if (!resp.data.animes) {
-        log("info", "customSourceSearchresp: seriesData 或 seriesList 不存在");
+        log("info", "[Custom] customSourceSearchresp: seriesData 或 seriesList 不存在");
         return [];
       }
 
@@ -39,7 +37,7 @@ export default class CustomSource extends BaseSource {
       return resp.data.animes;
     } catch (error) {
       // 捕获请求中的错误
-      log("error", "getCustomSourceAnimes error:", {
+      log("error", "[Custom] getCustomSourceAnimes error:", {
         message: error.message,
         name: error.name,
         stack: error.stack,
@@ -59,23 +57,23 @@ export default class CustomSource extends BaseSource {
 
       // 判断 resp 和 resp.data 是否存在
       if (!resp || !resp.data) {
-        log("info", "getCustomSourceEposides: 请求失败或无数据返回");
+        log("info", "[Custom] getCustomSourceEposides: 请求失败或无数据返回");
         return [];
       }
 
       // 判断 seriesData 是否存在
       if (!resp.data.bangumi || !resp.data.bangumi.episodes) {
-        log("info", `getCustomSourceEposides: episodes 不存在. Response: ${JSON.stringify(resp.data)}`);
+        log("info", `[Custom] getCustomSourceEposides: episodes 不存在. Response: ${JSON.stringify(resp.data)}`);
         return [];
       }
 
       // 正常情况下输出 JSON 字符串
-      log("info", `getCustomSourceEposides: ${JSON.stringify(resp.data.bangumi.episodes)}`);
+      log("info", `[Custom] getCustomSourceEposides: ${JSON.stringify(resp.data.bangumi.episodes)}`);
 
       return resp.data.bangumi.episodes;
     } catch (error) {
       // 捕获请求中的错误
-      log("error", "getCustomSourceEposides error:", {
+      log("error", "[Custom] getCustomSourceEposides error:", {
         message: error.message,
         name: error.name,
         stack: error.stack,
@@ -89,17 +87,13 @@ export default class CustomSource extends BaseSource {
 
     // 添加错误处理，确保sourceAnimes是数组
     if (!sourceAnimes || !Array.isArray(sourceAnimes)) {
-      log("error", "[Custom Source] sourceAnimes is not a valid array");
+      log("error", "[Custom] sourceAnimes is not a valid array");
       return [];
     }
 
-    const querySeason = resolveQuerySeason(queryTitle, detailStore);
-    const seasonPreferredAnimes = preferSeasonCandidatesIfPresent(sourceAnimes, querySeason, anime => anime.animeTitle || anime.title || '');
-
-    const processedPayloads = await mapWithConcurrency(
-      seasonPreferredAnimes,
-      resolveSourceConcurrency('custom', globals),
-      async (anime) => {
+    // 使用 map 和 async 时需要返回 Promise 数组，并等待所有 Promise 完成
+    const processCustomSourceAnimes = await Promise.all(sourceAnimes
+      .map(async (anime) => {
         try {
           const eps = await this.getEpisodes(anime.bangumiId);
           let links = [];
@@ -112,41 +106,36 @@ export default class CustomSource extends BaseSource {
             });
           }
 
-          if (links.length === 0) return null;
+          if (links.length > 0) {
+            let transformedAnime = {
+              animeId: anime.animeId,
+              bangumiId: String(anime.bangumiId),
+              animeTitle: `${anime.animeTitle}(${new Date(anime.startDate).getFullYear()})【${anime.typeDescription}】from custom`,
+              type: anime.type,
+              typeDescription: anime.typeDescription,
+              imageUrl: anime.imageUrl,
+              startDate: anime.startDate,
+              episodeCount: links.length,
+              rating: anime.rating,
+              isFavorited: true,
+              source: "custom",
+            };
 
-          const transformedAnime = {
-            animeId: anime.animeId,
-            bangumiId: String(anime.bangumiId),
-            animeTitle: `${anime.animeTitle}(${new Date(anime.startDate).getFullYear()})【${anime.typeDescription}】from custom`,
-            type: anime.type,
-            typeDescription: anime.typeDescription,
-            imageUrl: anime.imageUrl,
-            startDate: anime.startDate,
-            episodeCount: links.length,
-            rating: anime.rating,
-            isFavorited: true,
-            source: "custom",
-          };
+            tmpAnimes.push(transformedAnime);
 
-          return { transformedAnime, links };
+            addAnime({...transformedAnime, links: links}, detailStore);
+
+            if (globals.animes.length > globals.MAX_ANIMES) removeEarliestAnime();
+          }
         } catch (error) {
-          log("error", `[Custom Source] Error processing anime: ${error.message}`);
-          return null;
+          log("error", `[Custom] Error processing anime: ${error.message}`);
         }
-      }
+      })
     );
-
-    for (const payload of processedPayloads) {
-      if (!payload) continue;
-      const { transformedAnime, links } = payload;
-      tmpAnimes.push(transformedAnime);
-      addAnime({ ...transformedAnime, links }, detailStore);
-      if (globals.animes.length > globals.MAX_ANIMES) removeEarliestAnime();
-    }
 
     this.sortAndPushAnimesByYear(tmpAnimes, curAnimes);
 
-    return processedPayloads;
+    return processCustomSourceAnimes;
   }
 
   async getEpisodeDanmu(id) {
@@ -169,7 +158,7 @@ export default class CustomSource extends BaseSource {
       return allDanmus;
     } catch (error) {
       // 捕获请求中的错误
-      log("error", "fetchCustomSourceEpisodeDanmu error:", {
+      log("error", "[Custom] fetchCustomSourceEpisodeDanmu error:", {
         message: error.message,
         name: error.name,
         stack: error.stack,
@@ -179,7 +168,7 @@ export default class CustomSource extends BaseSource {
   }
 
   async getEpisodeDanmuSegments(id) {
-    log("info", "获取Custom Source弹幕分段列表...", id);
+    log("info", "[Custom] 获取Custom Source弹幕分段列表...", id);
 
     return new SegmentListResponse({
       "type": "custom",
